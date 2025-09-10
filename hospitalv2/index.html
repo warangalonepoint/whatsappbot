@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dr. Charan Hospital – Portal</title>
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=31"/>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Banner -->
+    <header class="banner">
+      <button id="themeToggle" class="chip floating-toggle">🌙</button>
+    </header>
+
+    <!-- Toolbar -->
+    <nav class="toolbar">
+      <a class="chip" href="login.html">🔐 Login</a>
+      <button id="clearCacheBtn" class="chip">Clear Cache</button>
+    </nav>
+
+    <!-- Welcome -->
+    <section class="section">
+      <h2>Welcome</h2>
+      <div class="tile-grid">
+        <a class="tile panel--lilac" href="dashboard.html">
+          <h3>Doctor Dashboard</h3>
+          <p>Patients, Follow-ups, Analytics</p>
+        </a>
+        <a class="tile panel--mint" href="admin.html">
+          <h3>Supervisor Console</h3>
+          <p>Bookings, Pharmacy, Staff</p>
+        </a>
+      </div>
+      <p class="muted mt12">Demo PINs → Doctor: <b>4321</b>, Supervisor: <b>1111</b></p>
+    </section>
+
+    <!-- System Check -->
+    <section class="section tint tint-lilac">
+      <h3>System Check</h3>
+      <p id="syscheck">⏳ Checking Firebase connection…</p>
+    </section>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module" src="js/fb.js"></script>
+  <script type="module">
+    // === Theme toggle
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
+
+    // === Clear cache
+    document.getElementById('clearCacheBtn').onclick=async()=>{
+      localStorage.clear();sessionStorage.clear();
+      if('caches' in window){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}
+      alert('Cache cleared.');location.reload();
+    };
+
+    // === Firebase System Check
+    async function check(){
+      const el=document.getElementById("syscheck");
+      try{
+        const staff=await DB.listStaff();
+        el.textContent="✅ Firebase connected ("+staff.length+" staff found)";
+        el.style.color="green";
+      }catch(e){
+        el.textContent="❌ Firebase error: "+e.message;
+        el.style.color="red";
+      }
+    }
+    check();
+  </script>
+</body>
+</html>
