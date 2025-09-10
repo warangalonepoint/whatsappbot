@@ -1,18 +1,196 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Sales Analytics — CSV Demo</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css"/>
 
-<!doctype html><html lang="en" data-theme="light">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Analytics – CSV Demo</title><link rel="stylesheet" href="styles.css"/><script src="js/csv.js"></script></head>
-<body><div class="wrap">
-<header class="banner"><a class="chip floating-toggle" href="index.html">← Home</a></header>
-<section class="card"><h2>Simple KPIs</h2>
-<div class="row"><div class="chip">Patients <b id="p">0</b></div><div class="chip">Invoices <b id="i">0</b></div><div class="chip">Revenue (sum) ₹ <b id="r">0.00</b></div></div>
-</section></div>
+  <!-- Charts & CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    .wrap{max-width:1120px;margin:0 auto}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 12px}
+    .chip{padding:10px 14px;border-radius:999px;background:var(--card-bg);border:1px solid rgba(0,0,0,.06);box-shadow:var(--shadow)}
+    .section{background:var(--card-bg);margin:12px;padding:18px;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .kpis{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .kpi{border-radius:16px;padding:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06)}
+    .kpi h4{font-size:14px;margin-bottom:6px;opacity:.85}
+    .kpi .num{font-size:28px;font-weight:800}
+    .row{display:grid;gap:16px;grid-template-columns:1fr;align-items:start}
+    @media (min-width:960px){.row{grid-template-columns:2fr 1fr}}
+    .muted{color:var(--muted)}
+    canvas{background:var(--card-bg);border-radius:16px;box-shadow:var(--shadow);padding:12px}
+    .filters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+    .filters .chip.active{background:var(--accent);color:#fff;font-weight:700}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="banner">
+    <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
+  </header>
+
+  <nav class="toolbar">
+    <a class="chip" href="index.html">← Home</a>
+    <button id="btnRefresh" class="chip">Force Refresh Cache</button>
+  </nav>
+
+  <section class="section">
+    <h2 style="margin-bottom:10px;">Sales Analytics</h2>
+    <div class="kpis">
+      <div class="kpi panel--blue">
+        <h4>Today (₹)</h4><div class="num" id="kpiToday">0.00</div>
+      </div>
+      <div class="kpi panel--mint">
+        <h4>This Month (₹)</h4><div class="num" id="kpiMTD">0.00</div>
+      </div>
+      <div class="kpi panel--peach">
+        <h4>Invoices Today</h4><div class="num" id="kpiCnt">0</div>
+      </div>
+      <div class="kpi panel--lilac">
+        <h4>Top Item (Today)</h4><div class="num" id="kpiTop">—</div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <button class="chip" data-range="today">Today</button>
+      <button class="chip" data-range="7d">7D</button>
+      <button class="chip active" data-range="30d">30D</button>
+      <button class="chip" data-range="ytd">YTD</button>
+      <span class="muted" id="rangeLabel"></span>
+    </div>
+
+    <div class="row">
+      <div>
+        <h3 class="muted" style="margin:8px 0">Revenue by Day</h3>
+        <canvas id="chartLine" height="140"></canvas>
+      </div>
+      <div>
+        <h3 class="muted" style="margin:8px 0">Top Items (Share)</h3>
+        <canvas id="chartPie" height="140"></canvas>
+      </div>
+    </div>
+
+    <p class="muted mt12">Source: <code>./data/invoices.csv</code> & <code>./data/invoice_items.csv</code></p>
+  </section>
+</div>
+
 <script>
-(function(){
-  document.getElementById('p').textContent = CsvDB.all('patients').length;
-  const inv=CsvDB.all('invoices'); document.getElementById('i').textContent=inv.length;
-  const sum = inv.reduce((s,x)=> s + Number(x.total_rs||0), 0);
-  document.getElementById('r').textContent = sum.toFixed(2);
-})();
+/* ===== Theme & Force refresh ===== */
+const t=document.getElementById('themeToggle');
+if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙'}
+t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const nxt=cur==='light'?'dark':'light';document.documentElement.dataset.theme=nxt;localStorage.theme=nxt;t.textContent=nxt==='light'?'🌞':'🌙'}
+document.getElementById('btnRefresh').onclick=async()=>{
+  try{
+    localStorage.clear();
+    if('caches' in window){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}
+    if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(r=>r.unregister()));}
+    alert('Cleared cache. Reloading…');location.reload();
+  }catch(e){alert(e.message)}
+};
+
+/* ===== CSV helpers ===== */
+async function loadCSV(url){
+  const r=await fetch(url,{cache:'no-cache'});
+  if(!r.ok) throw new Error('Fetch '+url+' failed');
+  const txt=await r.text();
+  return new Promise((res)=>Papa.parse(txt,{header:true,skipEmptyLines:true,complete:({data})=>res(data)}));
+}
+function parseMoney(v){const n=parseFloat(String(v||'').replace(/[, ]/g,''));return isNaN(n)?0:n;}
+function fmt(n){return (Number(n)||0).toFixed(2);}
+function iso(d){return new Date(d).toISOString().slice(0,10);}
+
+/* ===== Analytics ===== */
+const rangeBtns=[...document.querySelectorAll('.filters .chip')];
+let lineChart,pieChart;
+
+function setActiveRange(key){
+  rangeBtns.forEach(b=>b.classList.toggle('active',b.dataset.range===key));
+}
+function rangeDates(key){
+  const today=new Date(); const end=iso(today);
+  let start;
+  if(key==='today'){start=end;}
+  else if(key==='7d'){const s=new Date(today); s.setDate(s.getDate()-6); start=iso(s);}
+  else if(key==='30d'){const s=new Date(today); s.setDate(s.getDate()-29); start=iso(s);}
+  else if(key==='ytd'){const s=new Date(today.getFullYear(),0,1); start=iso(s);}
+  return {start,end};
+}
+
+async function render(range='30d'){
+  setActiveRange(range);
+  const {start,end}=rangeDates(range);
+  document.getElementById('rangeLabel').textContent=`${start} → ${end}`;
+
+  const [invoices, items]=await Promise.all([
+    loadCSV('data/invoices.csv'),
+    loadCSV('data/invoice_items.csv')
+  ]);
+
+  // Normalize dates
+  invoices.forEach(i=>{ i.invoice_date = (i.invoice_date||i.date||i.day||'').slice(0,10); i.total_rs=parseMoney(i.total_rs||i.total); });
+
+  // KPIs (today + MTD)
+  const todayISO=iso(new Date());
+  const monthStart=iso(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const todays = invoices.filter(i=>i.invoice_date===todayISO);
+  const mtd    = invoices.filter(i=>i.invoice_date>=monthStart);
+  const todayAmt=todays.reduce((s,i)=>s+i.total_rs,0);
+  const mtdAmt  =mtd.reduce((s,i)=>s+i.total_rs,0);
+  document.getElementById('kpiToday').textContent=fmt(todayAmt);
+  document.getElementById('kpiMTD').textContent=fmt(mtdAmt);
+  document.getElementById('kpiCnt').textContent=todays.length;
+
+  // Top item today
+  const mapToday={};
+  items.filter(it=> (it.invoice_date||it.date||'').slice(0,10)===todayISO)
+       .forEach(it=>{
+          const name=it.item_name||it.name||'—';
+          const line=parseMoney(it.amount_rs||it.amount||it.price_rs)* (parseFloat(it.qty||1)||1);
+          mapToday[name]=(mapToday[name]||0)+line;
+       });
+  const topItem=Object.entries(mapToday).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
+  document.getElementById('kpiTop').textContent=topItem;
+
+  // Filter window
+  const inRange=invoices.filter(i=>i.invoice_date>=start && i.invoice_date<=end);
+
+  // Line: group by day
+  const dayMap={};
+  inRange.forEach(i=>{ dayMap[i.invoice_date]=(dayMap[i.invoice_date]||0)+i.total_rs; });
+  const labels=Object.keys(dayMap).sort();
+  const values=labels.map(d=>dayMap[d]);
+
+  // Pie: item share in window
+  const itemsRange=items.filter(it=>{
+    const d=(it.invoice_date||it.date||'').slice(0,10);
+    return d>=start && d<=end;
+  });
+  const pieMap={};
+  itemsRange.forEach(it=>{
+    const name=it.item_name||it.name||'—';
+    const amt=parseMoney(it.amount_rs||it.amount||it.price_rs)*(parseFloat(it.qty||1)||1);
+    pieMap[name]=(pieMap[name]||0)+amt;
+  });
+  const pieLabels=Object.keys(pieMap);
+  const pieValues=pieLabels.map(k=>pieMap[k]);
+
+  // Draw charts
+  if(lineChart) lineChart.destroy();
+  if(pieChart)  pieChart.destroy();
+  const ctxL=document.getElementById('chartLine').getContext('2d');
+  const ctxP=document.getElementById('chartPie').getContext('2d');
+  lineChart=new Chart(ctxL,{type:'line',data:{labels,datasets:[{label:'₹',data:values,tension:.3,fill:true}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  pieChart=new Chart(ctxP,{type:'doughnut',data:{labels:pieLabels,datasets:[{data:pieValues}]},options:{plugins:{legend:{position:'bottom'}}}});
+}
+
+rangeBtns.forEach(b=>b.addEventListener('click',()=>render(b.dataset.range)));
+render(); // default 30D
 </script>
-</body></html>
+</body>
+</html>
