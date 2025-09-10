@@ -2,237 +2,157 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Doctor Dashboard – CSV Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Doctor Dashboard — CSV Demo</title>
   <link rel="icon" href="assets/logo.png"/>
-  <link rel="stylesheet" href="styles.css?v=3"/>
-
-  <!-- Charts -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  <link rel="stylesheet" href="styles.css"/>
 
   <style>
-    .wrap{max-width:1140px;margin:0 auto}
+    .wrap{max-width:1100px;margin:0 auto}
     .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 12px}
-    .chip{height:40px;padding:0 14px;border-radius:999px;background:var(--card-bg);
-      border:1px solid rgba(0,0,0,.06);box-shadow:var(--shadow);display:inline-flex;align-items:center}
-    .heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .chip{padding:10px 14px;border-radius:999px;background:var(--card-bg);border:1px solid rgba(0,0,0,.06);box-shadow:var(--shadow)}
+    .section{background:var(--card-bg);margin:12px;padding:18px;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .kpi{padding:14px;border-radius:14px;background:var(--t-blue);color:var(--c-blue);box-shadow:var(--shadow)}
+    .kpi:nth-child(2){background:var(--t-mint);color:var(--c-mint)}
+    .kpi:nth-child(3){background:var(--t-rose);color:var(--c-rose)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid rgba(0,0,0,.06);text-align:left}
+    th{opacity:.8}
     .muted{color:var(--muted)}
-    .grid-2{display:grid;gap:16px;grid-template-columns:1fr}
-    @media(min-width:900px){.grid-2{grid-template-columns:1fr 1fr}}
-    .kpi-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
-    .kpi{border-radius:16px;padding:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06)}
-    .kpi h4{font-size:14px;opacity:.85;margin-bottom:6px}
-    .kpi .num{font-size:28px;font-weight:800}
-    .range{display:flex;gap:8px;flex-wrap:wrap}
-    .range .chip{background:var(--t-lilac)}
-    .range .chip.active{background:var(--accent);color:#fff;font-weight:700;box-shadow:0 6px 14px rgba(37,99,235,.25)}
-    .panel{border-radius:18px;background:var(--card-bg);padding:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06)}
-    .panel h3{margin-bottom:10px}
-    .panel--blue{background:linear-gradient(135deg,var(--t-blue),#bcdfff)}
-    .panel--lilac{background:linear-gradient(135deg,var(--t-lilac),#cab8ff)}
-    .panel--mint{background:linear-gradient(135deg,var(--t-mint),#aaf5d0)}
-    .panel--peach{background:linear-gradient(135deg,var(--t-peach),#ffb9ad)}
-    .panel--rose{background:linear-gradient(135deg,var(--t-rose),#ffb6cc)}
-    .kpi.panel--blue,.kpi.panel--lilac,.kpi.panel--mint,.kpi.panel--peach{color:#102}
-    .chart-wrap{border-radius:16px;background:var(--card-bg);padding:14px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06)}
-    table{width:100%;border-collapse:separate;border-spacing:0}
-    th,td{padding:12px 14px;border-bottom:1px solid rgba(0,0,0,.06)}
-    th{font-weight:700;text-align:left}
   </style>
 </head>
 <body>
-<div class="wrap">
-  <!-- Banner -->
-  <header class="banner">
-    <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
-  </header>
+  <div class="wrap">
+    <header class="banner">
+      <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
+    </header>
 
-  <!-- Actions -->
-  <nav class="toolbar">
-    <a class="chip" href="index.html">← Home</a>
-    <button id="clearCacheBtn" class="chip">Clear Cache</button>
-  </nav>
+    <nav class="toolbar">
+      <a class="chip" href="index.html">← Home</a>
+      <button class="chip" id="btnForceRefresh">Force Refresh Cache</button>
+    </nav>
 
-  <!-- Sales -->
-  <section class="section">
-    <div class="heading">
-      <h2>Sales Analytics</h2>
-      <div class="range" id="rangeChips">
-        <button data-range="today" class="chip active">Today</button>
-        <button data-range="7d" class="chip">7D</button>
-        <button data-range="30d" class="chip">30D</button>
-        <button data-range="ytd" class="chip">YTD</button>
+    <section class="section">
+      <h2 style="margin-bottom:8px;">Sales Analytics</h2>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="muted">Today (₹)</div>
+          <div id="kpiToday" style="font-size:24px;font-weight:800">0.00</div>
+        </div>
+        <div class="kpi">
+          <div class="muted">This Month (₹)</div>
+          <div id="kpiMTD" style="font-size:24px;font-weight:800">0.00</div>
+        </div>
+        <div class="kpi">
+          <div class="muted">Invoices Today</div>
+          <div id="kpiCount" style="font-size:24px;font-weight:800">0</div>
+        </div>
       </div>
-    </div>
+      <div class="muted" style="margin-top:8px">Source: ./data/invoices.csv & ./data/invoice_items.csv</div>
+    </section>
 
-    <div class="kpi-grid">
-      <div class="kpi panel--blue"><h4>Total (₹)</h4><div id="kTotal" class="num">0.00</div></div>
-      <div class="kpi panel--lilac"><h4>Avg / Day (₹)</h4><div id="kAvg" class="num">0.00</div></div>
-      <div class="kpi panel--mint"><h4>Invoices</h4><div id="kInv" class="num">0</div></div>
-      <div class="kpi panel--peach"><h4>Top Item</h4><div id="kTop" class="num">—</div></div>
-    </div>
-
-    <div class="grid-2" style="margin-top:12px">
-      <div class="chart-wrap">
-        <h3 class="muted">Revenue by Day</h3>
-        <canvas id="revDay"></canvas>
-      </div>
-      <div class="chart-wrap">
-        <h3 class="muted">Top Items (Share)</h3>
-        <canvas id="topItems"></canvas>
-      </div>
-    </div>
-  </section>
-
-  <!-- Staff Today -->
-  <section class="section">
-    <div class="heading">
-      <h2>Staff (Today) – View only</h2>
-      <span id="todayLabel" class="muted"></span>
-    </div>
-    <div class="panel">
-      <table>
-        <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Note</th></tr></thead>
-        <tbody id="staffTbody"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+    <section class="section">
+      <h3 style="margin-bottom:8px;">Staff (Today) — View only</h3>
+      <table id="tblStaff">
+        <thead>
+          <tr><th>Name</th><th>Role</th><th>Status</th><th>Note</th></tr>
+        </thead>
+        <tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
       </table>
-    </div>
-  </section>
-</div>
+      <div class="muted" style="margin-top:8px">Source: ./data/staff_attendance.csv</div>
+    </section>
+  </div>
 
-<script src="js/csv.js?v=3"></script>
-<script>
-  // ===== Theme =====
-  const tBtn = document.getElementById('themeToggle');
-  if(localStorage.theme){ document.documentElement.dataset.theme=localStorage.theme;
-    tBtn.textContent = localStorage.theme==='light'?'🌞':'🌙'; }
-  tBtn.onclick=()=>{ const cur=document.documentElement.dataset.theme||'light';
-    const next=cur==='light'?'dark':'light'; document.documentElement.dataset.theme=next;
-    localStorage.theme=next; tBtn.textContent=next==='light'?'🌞':'🌙'; };
+  <script>
+    // Theme toggle
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙'}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const nxt=cur==='light'?'dark':'light';document.documentElement.dataset.theme=nxt;localStorage.theme=nxt;t.textContent=nxt==='light'?'🌞':'🌙'}
 
-  // ===== CSV helper is in js/csv.js (must exist) =====
-  const fmt = n => (Number(n)||0).toFixed(2);
-  const toISO = d => new Date(d).toISOString().slice(0,10);
-  const todayISO = toISO(new Date());
-  document.getElementById('todayLabel').textContent = todayISO;
+    // Force refresh / wipe caches + SW
+    document.getElementById('btnForceRefresh').onclick = async () => {
+      try{
+        if('serviceWorker' in navigator){
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r=>r.unregister()));
+        }
+        localStorage.clear();
+        if('caches' in window){
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k=>caches.delete(k)));
+        }
+        alert('Cache & service worker cleared. The page will reload now.');
+        location.reload(true);
+      }catch(e){alert('Clear error: '+e.message)}
+    };
 
-  const parseDate = s => {
-    if(!s) return null;
-    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s);
-    if(/^\d{2}-\d{2}-\d{4}$/.test(s)){ const [dd,mm,yy]=s.split('-').map(Number); return new Date(yy,mm-1,dd); }
-    const d = new Date(s); return isNaN(d)? null : d;
-  };
-
-  function inRange(d, which){
-    const dt = (d instanceof Date)? d : parseDate(d);
-    if(!dt) return false;
-    const end = new Date(); end.setHours(23,59,59,999);
-
-    if(which==='today') return toISO(dt)===todayISO;
-
-    if(which==='7d'){ const s = new Date(); s.setDate(s.getDate()-6); s.setHours(0,0,0,0); return dt>=s && dt<=end; }
-    if(which==='30d'){ const s = new Date(); s.setDate(s.getDate()-29); s.setHours(0,0,0,0); return dt>=s && dt<=end; }
-    if(which==='ytd'){ const s = new Date(new Date().getFullYear(),0,1); return dt>=s && dt<=end; }
-    return false;
-  }
-
-  // ===== Charts =====
-  let barChart, pieChart;
-  function makeBar(ctx, labels, values){
-    if(barChart) barChart.destroy();
-    barChart = new Chart(ctx, {
-      type:'bar',
-      data:{ labels, datasets:[{ label:'₹', data: values }]},
-      options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true } } }
-    });
-  }
-  function makePie(ctx, labels, values){
-    if(pieChart) pieChart.destroy();
-    pieChart = new Chart(ctx, {
-      type:'pie',
-      data:{ labels, datasets:[{ data: values }]},
-      options:{ responsive:true, maintainAspectRatio:false }
-    });
-  }
-
-  // ===== KPIs + Charts =====
-  async function loadKPIs(range='today'){
-    const inv   = await CSV.load('invoices');        // invoice_date,total_rs,invoice_no/id
-    const items = await CSV.load('invoice_items');   // invoice_id/invoice_no,item_name,qty,price_rs,amount_rs
-
-    // Filter invoices by range
-    const filtered = inv.filter(r => inRange(r.invoice_date, range));
-    const total = filtered.reduce((s,r)=> s + Number(r.total_rs||0), 0);
-    const days = (range==='today') ? 1 :
-                 (range==='7d') ? 7 :
-                 (range==='30d') ? 30 :
-                 Math.ceil((new Date() - new Date(new Date().getFullYear(),0,1))/86400000);
-
-    // KPIs
-    document.getElementById('kTotal').textContent = fmt(total);
-    document.getElementById('kAvg').textContent   = fmt(total/Math.max(1,days));
-    document.getElementById('kInv').textContent   = filtered.length;
-
-    // Revenue by day (group)
-    const byDay = {};
-    filtered.forEach(r=>{
-      const key = toISO(parseDate(r.invoice_date));
-      byDay[key] = (byDay[key]||0) + Number(r.total_rs||0);
-    });
-    const labelsBar = Object.keys(byDay).sort();
-    const valuesBar = labelsBar.map(k=> byDay[k]);
-
-    makeBar(document.getElementById('revDay'), labelsBar, valuesBar);
-
-    // Top items (pie) for invoices in range
-    const ids = new Set(filtered.map(r=> (r.id || r.invoice_id || r.invoice_no)));
-    const map = {};
-    (items||[]).forEach(it=>{
-      const belongs = ids.has(it.invoice_id) || ids.has(it.invoice_no);
-      if(!belongs) return;
-      const name = it.item_name || '—';
-      const amt  = Number(it.amount_rs || ((Number(it.price_rs)||0)*(Number(it.qty)||1)));
-      map[name] = (map[name]||0) + amt;
-    });
-    const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8);
-    const labelsPie = sorted.map(x=>x[0]);
-    const valuesPie = sorted.map(x=>x[1]);
-    document.getElementById('kTop').textContent = labelsPie[0] || '—';
-    makePie(document.getElementById('topItems'), labelsPie, valuesPie);
-  }
-
-  // Range chips
-  const chips = Array.from(document.querySelectorAll('#rangeChips .chip'));
-  chips.forEach(c => c.addEventListener('click', ()=>{
-    chips.forEach(x=>x.classList.remove('active'));
-    c.classList.add('active');
-    loadKPIs(c.dataset.range);
-  }));
-
-  // ===== Staff Today =====
-  async function loadStaffToday(){
-    const att = await CSV.load('staff_attendance'); // day,name,role,status,note
-    const todays = (att||[]).filter(r => toISO(parseDate(r.day))===todayISO);
-    const tb = document.getElementById('staffTbody');
-    tb.innerHTML = '';
-    if(!todays.length){
-      tb.innerHTML = '<tr><td colspan="4" class="muted">No data</td></tr>';
-      return;
+    // ---------- CSV helpers ----------
+    async function fetchCsv(path){
+      const res = await fetch(path, {cache:'no-store'});
+      if(!res.ok) throw new Error('Fetch failed: '+path);
+      const txt = await res.text();
+      return parseCsv(txt);
     }
-    todays.forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.name||''}</td><td>${r.role||''}</td><td>${r.status||''}</td><td>${r.note||''}</td>`;
-      tb.appendChild(tr);
-    });
-  }
+    function parseCsv(text){
+      // very small CSV parser (handles simple cases, quoted commas)
+      const rows=[]; let i=0, cur='', inQ=false, row=[];
+      while(i<text.length){
+        const c=text[i++];
+        if(c==='\"'){ inQ=!inQ; }
+        else if(c===',' && !inQ){ row.push(cur); cur=''; }
+        else if((c==='\n' || c==='\r') && !inQ){
+          if(cur!=='' || row.length){ row.push(cur); rows.push(row); row=[]; cur=''; }
+        } else { cur+=c; }
+      }
+      if(cur!=='' || row.length) { row.push(cur); rows.push(row); }
+      const header = rows.shift().map(h=>h.trim());
+      return rows.filter(r=>r.length===header.length).map(r=>{
+        const obj={}; header.forEach((h,idx)=>obj[h]=r[idx]); return obj;
+      });
+    }
+    const fmt = n => (Number(n)||0).toFixed(2);
+    const dISO = d => new Date(d).toISOString().slice(0,10);
 
-  // Clear cache
-  document.getElementById('clearCacheBtn').onclick = ()=>{ CSV.clear(); alert('Cleared local CSV cache. Reloading…'); location.reload(); };
+    // ---------- Load & render ----------
+    (async function(){
+      try{
+        const [invoices, items, att] = await Promise.all([
+          fetchCsv('./data/invoices.csv'),
+          fetchCsv('./data/invoice_items.csv'),
+          fetchCsv('./data/staff_attendance.csv')
+        ]);
 
-  // Boot
-  (async function init(){
-    await loadKPIs('today');
-    await loadStaffToday();
-  })();
-</script>
+        // KPIs
+        const today = dISO(new Date());
+        const monthStart = dISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+
+        const todaysInv = invoices.filter(i => (i.invoice_date||i.date)===today);
+        const mtdInv    = invoices.filter(i => (i.invoice_date||i.date) >= monthStart);
+
+        const sum = arr => arr.reduce((s,i)=> s + Number(i.total_rs||i.total||0), 0);
+        document.getElementById('kpiToday').textContent = fmt(sum(todaysInv));
+        document.getElementById('kpiMTD').textContent   = fmt(sum(mtdInv));
+        document.getElementById('kpiCount').textContent = todaysInv.length;
+
+        // Staff (today)
+        const tbody = document.querySelector('#tblStaff tbody');
+        tbody.innerHTML = '';
+        const todaysAtt = att.filter(a => (a.day||a.date)===today);
+        if(!todaysAtt.length){
+          tbody.innerHTML = '<tr><td colspan="4" class="muted">No data</td></tr>';
+        }else{
+          todaysAtt.forEach(a=>{
+            const tr=document.createElement('tr');
+            tr.innerHTML = `<td>${a.name||''}</td><td>${a.role||''}</td><td>${a.status||''}</td><td>${a.note||''}</td>`;
+            tbody.appendChild(tr);
+          });
+        }
+      }catch(e){
+        console.error(e);
+        alert('Error loading CSVs: '+e.message);
+      }
+    })();
+  </script>
 </body>
 </html>
