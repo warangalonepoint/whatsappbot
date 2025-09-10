@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Login – Dr. Charan Hospital</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css"/>
+
+  <style>
+    .wrap{max-width:520px;margin:0 auto}
+    .panel{background:var(--card-bg);padding:18px;border-radius:18px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06);margin:12px}
+    .title{font-size:24px;font-weight:800;margin:8px 12px}
+    .field{display:grid;gap:6px;margin:12px 0}
+    label{font-weight:600}
+    input[type="password"], input[type="tel"]{
+      width:100%;padding:12px 14px;border-radius:12px;border:1px solid rgba(0,0,0,.12);background:var(--card-bg);
+    }
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .btn{background:var(--accent);color:#fff;border:none;padding:12px 16px;border-radius:12px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
+    .btn.ghost{background:transparent;color:var(--fg);border:1px solid rgba(0,0,0,.12)}
+    .muted{color:var(--muted)}
+    .help{font-size:13px;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Banner -->
+    <header class="banner">
+      <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
+    </header>
+
+    <h1 class="title">Login</h1>
+
+    <section class="panel">
+      <div class="field">
+        <label for="pin">Enter PIN</label>
+        <input id="pin" type="tel" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••" />
+      </div>
+
+      <div class="row">
+        <button id="btnLogin" class="btn">Login</button>
+        <a class="btn ghost" href="index.html">← Back</a>
+      </div>
+
+      <p id="msg" class="help muted">Tip: Doctor PIN <strong>4321</strong>, Supervisor PIN <strong>1111</strong> (demo). You can change them in <code>login.html</code>.</p>
+    </section>
+
+    <section class="panel">
+      <h3 style="margin-bottom:8px;">Quick actions</h3>
+      <div class="row">
+        <button id="btnClear" class="btn ghost">Clear Saved Session</button>
+        <button id="btnDoctor" class="btn ghost">Fill Doctor PIN</button>
+        <button id="btnSupervisor" class="btn ghost">Fill Supervisor PIN</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    /* ===== Theme toggle ===== */
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙'}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙'}
+
+    /* ===== PIN mapping (edit here) ===== */
+    const PINS = {
+      "4321": { role:"doctor",     name:"Doctor" },
+      "1111": { role:"supervisor", name:"Supervisor" }
+      // Add more like: "2222": { role:"staff", name:"Front Desk" }
+    };
+
+    /* ===== Redirect map by role ===== */
+    const HOME = {
+      doctor: "dashboard.html",
+      supervisor: "admin.html",
+      staff: "admin.html"
+    };
+
+    /* If already logged in, bounce */
+    const sess = JSON.parse(localStorage.getItem('session')||'null');
+    if(sess && sess.role && HOME[sess.role]) {
+      location.replace(HOME[sess.role]);
+    }
+
+    const $ = id => document.getElementById(id);
+    $('btnDoctor').onclick = ()=>{$('pin').value='4321';$('pin').focus();}
+    $('btnSupervisor').onclick = ()=>{$('pin').value='1111';$('pin').focus();}
+    $('btnClear').onclick = ()=>{
+      localStorage.removeItem('session');
+      alert('Saved session cleared.');
+    };
+
+    $('btnLogin').onclick = ()=>{
+      const pin = $('pin').value.trim();
+      const hit = PINS[pin];
+      if(!hit){ $('msg').innerHTML = '❌ Invalid PIN. Try again.'; return; }
+      const session = { role: hit.role, name: hit.name, ts: Date.now() };
+      localStorage.setItem('session', JSON.stringify(session));
+      const dest = HOME[hit.role] || 'index.html';
+      location.replace(dest);
+    };
+
+    // Enter key submits
+    $('pin').addEventListener('keydown', e=>{ if(e.key==='Enter') $('btnLogin').click(); });
+  </script>
+</body>
+</html>
