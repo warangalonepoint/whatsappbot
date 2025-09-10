@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Patients</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=31"/>
+  <style>
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
+    .controls input, .controls select{padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.12)}
+    .list{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+    .row{border:1px solid rgba(0,0,0,.08);border-radius:16px;padding:14px;box-shadow:var(--shadow);background:var(--card-bg)}
+    .meta{font-size:13px;opacity:.8}
+    .btn{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:10px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header class="banner">
+    <button id="themeToggle" class="floating-toggle" aria-label="Theme">🌙</button>
+  </header>
+
+  <section class="section">
+    <div class="controls">
+      <h2>Patients</h2>
+      <span style="flex:1 1 auto"></span>
+      <input id="q" placeholder="Search by name/phone"/>
+      <select id="filter">
+        <option value="all">All</option>
+        <option value="today">Follow-ups Today</option>
+        <option value="7d">Next 7 Days</option>
+      </select>
+    </div>
+
+    <div class="list" id="list"></div>
+  </section>
+
+  <script type="module" src="js/fb.js"></script>
+  <script type="module">
+    // Theme
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
+
+    const iso=d=>new Date(d).toISOString().slice(0,10);
+    const todayISO = iso(new Date());
+
+    let all = [];   // {id, name, phone, next_visit?, last_visit?}
+
+    async function load(){
+      try{
+        all = await DB.listPatients();
+      }catch(e){
+        // fallback to local servedPatients if exists (your app used this earlier)
+        const served = JSON.parse(localStorage.getItem('servedPatients')||'[]');
+        all = served.map(x=>({ id:x.id||crypto.randomUUID(), name:x.name||x.patientName||'—', phone:x.phone||'', next_visit:x.reminderISO||null, last_visit:x.lastVisitISO||null }));
+      }
+      render();
+    }
+
+    function matchesFilter(p){
+      const f=document.getElementById('filter').value;
+      if(f==='all') return true;
+      const nv = p.next_visit;
+      if(!nv) return false;
+      const nvDate = new Date(nv);
+      if(f==='today') return iso(nvDate)===todayISO;
+      if(f==='7d'){ const in7=new Date(); in7.setDate(in7.getDate()+7); return nvDate>=new Date() && nvDate<=in7; }
+      return true;
+    }
+
+    function matchesSearch(p){
+      const q=(document.getElementById('q').value||'').toLowerCase().trim();
+      if(!q) return true;
+      return (p.name||'').toLowerCase().includes(q) || (p.phone||'').toLowerCase().includes(q);
+    }
+
+    function waHref(phone, name, next_visit){
+      const n=(phone||'').replace(/\D/g,'');
+      const msg=`Hi ${name||''}, this is Dr. Charan Hospital. Reminder for your visit on ${next_visit||'—'}.`;
+      return `https://wa.me/${n}?text=${encodeURIComponent(msg)}`;
+    }
+
+    function render(){
+      const list=document.getElementById('list');
+      const rows = all.filter(p=>matchesFilter(p)&&matchesSearch(p));
+      list.innerHTML = rows.map(p=>`
+        <div class="row">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+            <div>
+              <div style="font-weight:700">${p.name||'—'}</div>
+              <div class="meta">${p.phone||''}</div>
+            </div>
+            <a class="btn" href="${waHref(p.phone,p.name,p.next_visit)}" target="_blank">WhatsApp</a>
+          </div>
+          <div class="meta mt8">
+            Last visit: ${p.last_visit || '—'} &nbsp; | &nbsp; Next: <strong>${p.next_visit || '—'}</strong>
+          </div>
+        </div>
+      `).join('') || `<div class="muted">No patients match your filters.</div>`;
+    }
+
+    document.getElementById('q').oninput=render;
+    document.getElementById('filter').onchange=render;
+
+    load();
+  </script>
+</body>
+</html>
