@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pharmacy – Billing</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=31"/>
+  <style>
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .field{display:flex;flex-direction:column;gap:6px}
+    input{padding:12px 14px;border-radius:14px;border:1px solid rgba(0,0,0,.12);background:var(--card-bg);color:var(--fg);font-size:15px}
+    table{width:100%;border-collapse:collapse} th,td{border-top:1px solid rgba(0,0,0,.08);padding:8px 10px;text-align:left}
+    .right{text-align:right}
+    .btn{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:12px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header class="banner"><button id="themeToggle" class="floating-toggle">🌙</button></header>
+
+  <section class="section">
+    <h2>Create Invoice</h2>
+    <div class="grid mt12">
+      <div class="field"><label>Invoice No</label><input id="invoiceNo" placeholder="INV-001"/></div>
+      <div class="field"><label>Invoice Date</label><input id="invoiceDate" type="date"/></div>
+      <div class="field"><label>Patient Name</label><input id="patientName" placeholder="Name"/></div>
+      <div class="field"><label>Phone</label><input id="patientPhone" placeholder="10-digit"/></div>
+      <div class="field"><label>Doctor</label><input id="doctorName" placeholder="Dr. Charan"/></div>
+    </div>
+
+    <h3 class="mt16">Items</h3>
+    <table class="mt8" id="itemsTable">
+      <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th class="right">Amount</th><th></th></tr></thead>
+      <tbody id="itemsBody"></tbody>
+      <tfoot>
+        <tr><td colspan="5"><button class="btn" id="addItemBtn">+ Add Item</button></td></tr>
+      </tfoot>
+    </table>
+
+    <div class="grid mt16">
+      <div class="field"><label>Discount (%)</label><input id="discountPct" value="0"/></div>
+      <div class="field"><label>Discount (₹)</label><input id="discountRs" value="0"/></div>
+      <div class="field"><label>Paid (₹)</label><input id="paidRs" value="0"/></div>
+      <div class="field"><label>Total (₹)</label><input id="totalRs" value="0" readonly/></div>
+      <div class="field"><label>Balance (₹)</label><input id="balanceRs" value="0" readonly/></div>
+    </div>
+
+    <div class="mt16">
+      <button class="btn" id="saveBtn">Save Invoice</button>
+    </div>
+  </section>
+
+  <script type="module" src="js/fb.js"></script>
+  <script type="module">
+    const el=(id)=>document.getElementById(id);
+    const money=(n)=>(+n||0).toFixed(2);
+
+    // Theme
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
+
+    // Items state
+    let items=[];
+    function addRow(it={item_name:'',qty:1,price_rs:0}){
+      items.push(it); paintItems();
+    }
+    function removeRow(idx){ items.splice(idx,1); paintItems(); }
+    function paintItems(){
+      const tb=el('itemsBody'); tb.innerHTML='';
+      items.forEach((it,idx)=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML=`
+          <td><input data-k="name"   data-i="${idx}" value="${it.item_name||''}" placeholder="Item name"/></td>
+          <td><input data-k="qty"    data-i="${idx}" value="${it.qty||1}" style="width:80px"/></td>
+          <td><input data-k="price"  data-i="${idx}" value="${it.price_rs||0}" style="width:120px"/></td>
+          <td class="right" id="amt-${idx}">${money((+it.qty||0)*(+it.price_rs||0))}</td>
+          <td><button class="btn" data-del="${idx}">✕</button></td>
+        `;
+        tb.appendChild(tr);
+      });
+      tb.querySelectorAll('input').forEach(inp=>{
+        inp.oninput=(e)=>{
+          const i=+e.target.dataset.i, k=e.target.dataset.k, v=e.target.value;
+          if(k==='name') items[i].item_name=v;
+          if(k==='qty')  items[i].qty=+v||0;
+          if(k==='price')items[i].price_rs=+v||0;
+          document.getElementById(`amt-${i}`).textContent=money((+items[i].qty||0)*(+items[i].price_rs||0));
+          recalc();
+        };
+      });
+      tb.querySelectorAll('button[data-del]').forEach(b=>b.onclick=()=>removeRow(+b.dataset.del));
+      recalc();
+    }
+    el('addItemBtn').onclick=()=>addRow();
+
+    // Totals
+    function recalc(){
+      const sub=items.reduce((s,it)=>s+((+it.qty||0)*(+it.price_rs||0)),0);
+      const pct=+el('discountPct').value||0;
+      const rs =+el('discountRs').value||0;
+      const tot=Math.max(0, sub - (sub*(pct/100)) - rs);
+      const paid=+el('paidRs').value||0;
+      el('totalRs').value=money(tot);
+      el('balanceRs').value=money(Math.max(0, tot - paid));
+    }
+    ['discountPct','discountRs','paidRs'].forEach(id=>el(id).oninput=recalc);
+
+    // Defaults
+    el('invoiceDate').value=(new Date()).toISOString().slice(0,10);
+    addRow();
+
+    async function saveInvoice(){
+      const inv={
+        invoice_no: el('invoiceNo').value.trim(),
+        invoice_date: el('invoiceDate').value || (new Date()).toISOString().slice(0,10),
+        patient_name: el('patientName').value.trim(),
+        patient_phone: el('patientPhone').value.trim(),
+        doctor_name: el('doctorName').value.trim(),
+        discount_pct: +el('discountPct').value||0,
+        discount_rs:  +el('discountRs').value||0,
+        total_rs:     +el('totalRs').value||0,
+        paid_rs:      +el('paidRs').value||0,
+        balance_rs:   +el('balanceRs').value||0,
+        items: items.map(x=>({item_name:x.item_name||'', qty:+x.qty||0, price_rs:+x.price_rs||0, amount_rs:(+x.qty||0)*(+x.price_rs||0)}))
+      };
+      try{
+        const id=await DB.saveInvoice(inv);
+        // mirror to local as fallback
+        const ls=JSON.parse(localStorage.getItem('invoices')||'[]'); ls.push({id,...inv}); localStorage.setItem('invoices',JSON.stringify(ls));
+        alert('Invoice saved ✔');
+        // reset
+        items=[]; paintItems(); ['invoiceNo','patientName','patientPhone','doctorName','discountPct','discountRs','paidRs'].forEach(id=>el(id).value='');
+        el('invoiceDate').value=(new Date()).toISOString().slice(0,10);
+        el('totalRs').value=money(0); el('balanceRs').value=money(0);
+      }catch(e){ alert('Save failed: '+e.message); }
+    }
+    el('saveBtn').onclick=saveInvoice;
+  </script>
+</body>
+</html>
