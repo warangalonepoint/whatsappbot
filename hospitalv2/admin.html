@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Supervisor Console</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=31"/>
+  <style>
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+    table{width:100%;border-collapse:collapse} th,td{border-top:1px solid rgba(0,0,0,.08);padding:8px 10px;text-align:left}
+    select,input{padding:8px 10px;border-radius:12px;border:1px solid rgba(0,0,0,.12)}
+    .btn{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:10px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header class="banner"><button id="themeToggle" class="floating-toggle">🌙</button></header>
+
+  <section class="section">
+    <h2>Quick Links</h2>
+    <div class="card-grid">
+      <a class="card panel--mint" href="pharmacy.html"><h3>Pharmacy – Billing</h3></a>
+      <a class="card panel--lilac" href="pharmacy-report.html"><h3>Pharmacy – Reports</h3></a>
+    </div>
+  </section>
+
+  <section class="section">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2>Staff – Attendance</h2>
+      <div>
+        <input id="day" type="date"/>
+        <button class="btn" id="loadBtn">Load</button>
+      </div>
+    </div>
+
+    <div class="grid mt12">
+      <div>
+        <h3>Roster</h3>
+        <div id="roster"></div>
+      </div>
+      <div>
+        <h3>Day Sheet</h3>
+        <table>
+          <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Note</th><th></th></tr></thead>
+          <tbody id="sheet"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="js/fb.js"></script>
+  <script type="module">
+    const iso=d=>new Date(d).toISOString().slice(0,10);
+
+    // Theme
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
+
+    // State
+    let staff=[], dayISO=iso(new Date());
+
+    async function loadStaff(){ staff=await DB.listStaff(); document.getElementById('roster').innerHTML = staff.map(s=>`<div class="card"><h4>${s.name}</h4><p>${s.role||'Staff'}</p></div>`).join(''); }
+
+    async function loadSheet(){
+      const rows = await DB.listAttendanceByDay(dayISO);
+      const byId = Object.fromEntries(rows.map(r=>[r.staff_id,r]));
+      const tb=document.getElementById('sheet'); tb.innerHTML='';
+      staff.forEach(s=>{
+        const row = byId[s.id] || {status:'On Duty',note:''};
+        const tr=document.createElement('tr');
+        tr.innerHTML=`
+          <td>${s.name}</td>
+          <td>${s.role||'Staff'}</td>
+          <td>
+            <select data-id="${s.id}">
+              ${['On Duty','On Leave','Absent'].map(opt=>`<option ${row.status===opt?'selected':''}>${opt}</option>`).join('')}
+            </select>
+          </td>
+          <td><input data-note="${s.id}" value="${row.note||''}"/></td>
+          <td><button class="btn" data-save="${s.id}">Save</button></td>
+        `;
+        tb.appendChild(tr);
+      });
+      tb.querySelectorAll('button[data-save]').forEach(b=>b.onclick=async()=>{
+        const id=b.dataset.save;
+        const status=tb.querySelector(`select[data-id="${id}"]`).value;
+        const note=tb.querySelector(`input[data-note="${id}"]`).value;
+        try{
+          await DB.upsertAttendance({staff_id:id, day:dayISO, name:staff.find(x=>x.id===id)?.name||'', role:staff.find(x=>x.id===id)?.role||'Staff', status, note});
+          alert('Saved ✔');
+        }catch(e){ alert('Save failed: '+e.message); }
+      });
+    }
+
+    document.getElementById('day').value=dayISO;
+    document.getElementById('loadBtn').onclick=async()=>{ dayISO=document.getElementById('day').value||dayISO; await loadSheet(); };
+
+    (async function init(){ await loadStaff(); await loadSheet(); })();
+  </script>
+</body>
+</html>
