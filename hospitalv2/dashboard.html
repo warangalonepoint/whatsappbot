@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Doctor Dashboard</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=31"/>
+</head>
+<body>
+  <!-- Banner -->
+  <header class="banner">
+    <button id="themeToggle" class="floating-toggle" aria-label="Theme">🌙</button>
+  </header>
+
+  <!-- Main cards -->
+  <section class="section">
+    <div class="card-grid">
+      <a href="pharmacy.html" class="card panel--blue">
+        <h3>Pharmacy</h3>
+        <p id="pharmacySummary">Today ₹0.00 • MTD ₹0.00 • Top: —</p>
+      </a>
+
+      <a href="patients.html" class="card panel--rose">
+        <h3>Patients</h3>
+        <p>Reminders & history</p>
+      </a>
+
+      <a href="admin.html" class="card panel--peach">
+        <h3>Staff</h3>
+        <p>Roster & attendance (supervisor)</p>
+      </a>
+
+      <a href="pharmacy-report.html" class="card panel--lilac">
+        <h3>Reports</h3>
+        <p>Daily / Monthly sales</p>
+      </a>
+    </div>
+  </section>
+
+  <!-- Sales snapshot -->
+  <section class="section">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2>Sales Analytics</h2>
+      <div class="chips range">
+        <button class="chip chip--blue"  data-range="today">Today</button>
+        <button class="chip chip--mint"  data-range="7d">7D</button>
+        <button class="chip chip--peach" data-range="30d">30D</button>
+        <button class="chip chip--lilac" data-range="ytd">YTD</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid mt12">
+      <div class="kpi panel--blue">
+        <h4>Total (₹)</h4>
+        <div class="num" id="kpiTotal">0.00</div>
+      </div>
+      <div class="kpi panel--lilac">
+        <h4>Avg / Day (₹)</h4>
+        <div class="num" id="kpiAvg">0.00</div>
+      </div>
+      <div class="kpi panel--mint">
+        <h4>Invoices</h4>
+        <div class="num" id="kpiInv">0</div>
+      </div>
+      <div class="kpi panel--rose">
+        <h4>Top Item</h4>
+        <div class="num" id="kpiTop">–</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-title">Revenue by Day</div>
+      <canvas id="lineChart" height="160"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Top Items (Share)</div>
+      <canvas id="pieChart" height="160"></canvas>
+    </div>
+  </section>
+
+  <script src="assets/chart.umd.min.js"></script>
+  <script type="module" src="js/fb.js"></script>
+  <script type="module">
+    // Theme
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
+
+    // Utils
+    const iso=d=>new Date(d).toISOString().slice(0,10);
+    const money=n=>(Number(n)||0).toFixed(2);
+
+    async function loadRange(range='today'){
+      const now=new Date(); let from=new Date(now);
+      if(range==='7d'){ from.setDate(now.getDate()-6); }
+      else if(range==='30d'){ from.setDate(now.getDate()-29); }
+      else if(range==='ytd'){ from=new Date(now.getFullYear(),0,1); }
+      const rows = await DB.listInvoicesBetween(iso(from), iso(now));
+      return rows.map(r=>({date:r.invoice_date,total:+r.total_rs||0,items:r.items||[]}));
+    }
+
+    function summarize(rows, fromISO, toISO){
+      const total=rows.reduce((s,r)=>s+r.total,0);
+      const days = Math.max(1, Math.round((new Date(toISO)-new Date(fromISO))/86400000)+1);
+      const avg=total/days;
+      const count=rows.length;
+
+      // top item
+      const items={};
+      rows.forEach(r=>(r.items||[]).forEach(it=>{
+        const name=it.item_name||it.name||'Item';
+        const amt=(+it.qty||0)*(+it.price_rs||it.price||0);
+        items[name]=(items[name]||0)+amt;
+      }));
+      const top=Object.entries(items).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
+
+      // by day
+      const byDay={};
+      rows.forEach(r=>{ byDay[r.date]=(byDay[r.date]||0)+r.total; });
+      const labels=Object.keys(byDay).sort();
+      const lineData=labels.map(k=>byDay[k]);
+
+      return {total,avg,count,top,labels,lineData,items};
+    }
+
+    // Charts
+    const line=new Chart(document.getElementById('lineChart'),{
+      type:'line',
+      data:{labels:[],datasets:[{label:'Revenue',data:[],borderWidth:2,tension:.3}]},
+      options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}
+    });
+    const pie=new Chart(document.getElementById('pieChart'),{
+      type:'pie',
+      data:{labels:[],datasets:[{data:[]}]},
+      options:{responsive:true,maintainAspectRatio:false}
+    });
+
+    async function paint(range='today'){
+      const nowISO = iso(new Date());
+      let from = new Date(); if(range==='7d')from.setDate(from.getDate()-6); else if(range==='30d')from.setDate(from.getDate()-29); else if(range==='ytd')from=new Date(new Date().getFullYear(),0,1);
+      const rows = await loadRange(range);
+      const s = summarize(rows, iso(from), nowISO);
+
+      document.getElementById('kpiTotal').textContent=money(s.total);
+      document.getElementById('kpiAvg').textContent=money(s.avg);
+      document.getElementById('kpiInv').textContent=s.count;
+      document.getElementById('kpiTop').textContent=s.top;
+
+      // pharmacy summary tile
+      const todayTotal = rows.filter(r=>r.date===nowISO).reduce((a,r)=>a+r.total,0);
+      document.getElementById('pharmacySummary').textContent=`Today ₹${money(todayTotal)} • MTD ₹${money(s.total)} • Top: ${s.top}`;
+
+      line.data.labels=s.labels; line.data.datasets[0].data=s.lineData; line.update();
+      const labels=Object.keys(s.items), vals=Object.values(s.items);
+      pie.data.labels=labels.length?labels:['No data']; pie.data.datasets[0].data=vals.length?vals:[1]; pie.update();
+    }
+
+    // range chips
+    const rangeBar=document.querySelector('.range');
+    function setActive(name){
+      rangeBar.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+      const el=rangeBar.querySelector(`[data-range="${name}"]`); if(el) el.classList.add('active');
+      paint(name);
+    }
+    rangeBar.addEventListener('click',e=>{const btn=e.target.closest('.chip'); if(btn) setActive(btn.dataset.range);});
+    setActive('today');
+  </script>
+</body>
+</html>
