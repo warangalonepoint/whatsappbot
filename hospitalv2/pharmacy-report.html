@@ -1,28 +1,297 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pharmacy – Reports (CSV Demo)</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=6"/>
 
-<!doctype html><html lang="en" data-theme="light">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Pharmacy Reports – CSV Demo</title><link rel="stylesheet" href="styles.css"/><script src="js/csv.js"></script></head>
-<body><div class="wrap">
-<header class="banner"><a class="chip floating-toggle" href="admin.html">← Admin</a></header>
-<section class="card"><h2>Sales Summary</h2>
-  <div class="row">
-    <div class="chip">Today ₹ <b id="t">0.00</b></div>
-    <div class="chip">MTD ₹ <b id="m">0.00</b></div>
-    <div class="chip">Invoices Today <b id="c">0</b></div>
-  </div>
-  <table id="tbl"></table>
-</section></div>
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    .wrap{max-width:1140px;margin:0 auto}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 12px}
+    .chip{height:40px;padding:0 14px;border-radius:999px;background:var(--card-bg);
+      border:1px solid rgba(0,0,0,.06);box-shadow:var(--shadow);display:inline-flex;align-items:center}
+    .panel{border-radius:18px;background:var(--card-bg);padding:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06);margin:12px}
+    .kpi-grid{display:grid;gap:14px;grid-template-columns:repeat(2,1fr)}
+    @media (min-width:860px){ .kpi-grid{grid-template-columns:repeat(6,1fr)} }
+    .kpi{border-radius:16px;padding:14px;border:1px solid rgba(0,0,0,.06);background:var(--card-bg)}
+    .kpi h4{font-size:.9rem;margin-bottom:6px;opacity:.9}
+    .kpi .num{font-size:1.35rem;font-weight:800}
+    .kpi.blue{background:linear-gradient(135deg,var(--t-blue),#bcdfff);color:var(--c-blue)}
+    .kpi.lilac{background:linear-gradient(135deg,var(--t-lilac),#cab8ff);color:var(--c-lilac)}
+    .kpi.mint{background:linear-gradient(135deg,var(--t-mint),#aaf5d0);color:var(--c-mint)}
+    .kpi.peach{background:linear-gradient(135deg,var(--t-peach),#ffb9ad);color:var(--c-peach)}
+    .kpi.rose{background:linear-gradient(135deg,var(--t-rose),#ffb6cc);color:var(--c-rose)}
+    .range{display:flex;gap:8px;flex-wrap:wrap}
+    .range .chip.active{background:var(--accent);color:#fff;font-weight:700;box-shadow:0 6px 14px rgba(37,99,235,.35)}
+    .grid-2{display:grid;gap:16px;grid-template-columns:1fr}
+    @media (min-width:900px){ .grid-2{grid-template-columns:1fr 1fr} }
+    .chart-wrap{border-radius:18px;background:var(--card-bg);padding:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06)}
+    .chart-title{font-weight:800;margin-bottom:8px}
+    .muted{color:var(--muted)}
+    .hint{font-size:12px;color:var(--muted)}
+    input[type="date"]{height:40px;padding:6px 10px;border-radius:12px;border:1px solid rgba(0,0,0,.12)}
+    .file-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Banner -->
+  <header class="banner">
+    <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
+  </header>
+
+  <!-- Actions -->
+  <nav class="toolbar">
+    <a class="chip" href="admin.html">← Supervisor</a>
+    <a class="chip" href="pharmacy.html">💊 Billing</a>
+    <button id="clearCacheBtn" class="chip">Clear Cache</button>
+    <span class="chip">Mode: <b style="margin-left:6px">CSV Demo</b></span>
+  </nav>
+
+  <!-- KPIs -->
+  <section class="panel">
+    <h2 style="margin-bottom:10px">Sales Analytics</h2>
+    <div class="kpi-grid">
+      <div class="kpi blue">
+        <h4>Total (₹)</h4>
+        <div class="num" id="kTotal">0.00</div>
+      </div>
+      <div class="kpi lilac">
+        <h4>Avg / Day (₹)</h4>
+        <div class="num" id="kAvg">0.00</div>
+      </div>
+      <div class="kpi mint">
+        <h4>Invoices</h4>
+        <div class="num" id="kInv">0</div>
+      </div>
+      <div class="kpi peach">
+        <h4>Top Item</h4>
+        <div class="num" id="kTop">—</div>
+      </div>
+      <div class="kpi rose">
+        <h4>Follow-ups Today</h4>
+        <div class="num" id="kFup">0</div>
+      </div>
+      <div class="kpi" style="display:flex;align-items:center;justify-content:center">
+        <div class="range" id="rangeBtns">
+          <button class="chip active" data-range="today">Today</button>
+          <button class="chip" data-range="7d">7D</button>
+          <button class="chip" data-range="30d">30D</button>
+          <button class="chip" data-range="ytd">YTD</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span class="muted">Custom:</span>
+      <input type="date" id="fromDate"/>
+      <span class="muted">→</span>
+      <input type="date" id="toDate"/>
+      <button id="applyCustom" class="chip">Apply</button>
+      <span class="hint">Data source: <code>data/invoices.csv</code>, <code>data/invoice_items.csv</code></span>
+    </div>
+    <div class="file-row" style="margin-top:8px">
+      <input type="file" id="fileInv" accept=".csv"/>
+      <label class="hint" for="fileInv">or choose invoices.csv</label>
+      <input type="file" id="fileItems" accept=".csv"/>
+      <label class="hint" for="fileItems">or choose invoice_items.csv</label>
+      <button id="reloadBtn" class="chip">Reload Files</button>
+    </div>
+  </section>
+
+  <!-- Charts -->
+  <section class="panel">
+    <div class="grid-2">
+      <div class="chart-wrap">
+        <div class="chart-title">Revenue by Day <span id="rangeLabel" class="muted"></span></div>
+        <canvas id="salesDay"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Top Items (Share)</div>
+        <canvas id="itemsPie"></canvas>
+      </div>
+    </div>
+  </section>
+</div>
+
 <script>
-function fmt(n){return (Number(n)||0).toFixed(2);} function iso(d){return new Date(d).toISOString().slice(0,10);}
-(function(){
-  const inv = CsvDB.all('invoices'); const today=iso(new Date()); const month=today.slice(0,7);
-  const todays = inv.filter(i=> (i.invoice_date||'').slice(0,10)===today);
-  const mtd = inv.filter(i=> (i.invoice_date||'').slice(0,7)===month);
-  document.getElementById('t').textContent=fmt(todays.reduce((s,i)=>s+Number(i.total_rs||0),0));
-  document.getElementById('m').textContent=fmt(mtd.reduce((s,i)=>s+Number(i.total_rs||0),0));
-  document.getElementById('c').textContent=todays.length;
-  const rows=[['#','Date','Patient','Total']].concat(inv.map(i=>[i.invoice_no||'',i.invoice_date||'',i.patient_name||'',fmt(i.total_rs||0)]));
-  document.getElementById('tbl').innerHTML=rows.map((r,i)=>'<tr>'+r.map(c=>`<${i?'td':'th'}>${c}</${i?'td':'th'}>`).join('')+'</tr>').join('');
+/* ========= THEME / HELPERS ========= */
+const t=document.getElementById('themeToggle');
+if(localStorage.theme){ document.documentElement.dataset.theme=localStorage.theme; t.textContent=localStorage.theme==='light'?'🌞':'🌙'; }
+t.onclick=()=>{ const cur=document.documentElement.dataset.theme||'light'; const next=cur==='light'?'dark':'light'; document.documentElement.dataset.theme=next; localStorage.theme=next; t.textContent=next==='light'?'🌞':'🌙'; };
+document.getElementById('clearCacheBtn').onclick=()=>{ localStorage.removeItem('csv_inv'); localStorage.removeItem('csv_items'); alert('Cleared cached CSV.'); location.reload(); };
+
+const toISO = d => new Date(d).toISOString().slice(0,10);
+const todayISO = toISO(new Date());
+document.getElementById('fromDate').value = todayISO;
+document.getElementById('toDate').value = todayISO;
+
+function money(n){ n = Number(n)||0; return n.toFixed(2); }
+function addDays(iso,days){ const d=new Date(iso); d.setDate(d.getDate()+days); return toISO(d); }
+
+/* ========= SUPER SIMPLE CSV PARSER ========= */
+function parseCSV(text){
+  const rows = [];
+  let i=0, field='', row=[], inQ=false;
+  while(i<text.length){
+    const c=text[i++];
+    if(c==='\"'){ if(inQ && text[i]==='\"'){ field+='\"'; i++; } else inQ=!inQ; }
+    else if(c===',' && !inQ){ row.push(field); field=''; }
+    else if((c==='\n'||c==='\r') && !inQ){
+      if(field.length || row.length){ row.push(field); rows.push(row); row=[]; field=''; }
+    } else field+=c;
+  }
+  if(field.length || row.length) { row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const headers = rows[0].map(h=>h.trim());
+  return rows.slice(1).filter(r=>r.some(x=>x && x.trim()!=='')).map(r=>{
+    const o={}; headers.forEach((h,idx)=>o[h]=r[idx]??''); return o;
+  });
+}
+
+/* ========= LOAD CSV (from /data or picked files) ========= */
+async function fetchCsv(url){
+  const res = await fetch(url + '?v=' + Date.now());
+  if(!res.ok) throw new Error('Missing ' + url);
+  return parseCSV(await res.text());
+}
+let CSV_INV = [], CSV_ITEMS = [];
+
+async function loadData(){
+  // from cache?
+  if(!CSV_INV.length){
+    const c=localStorage.getItem('csv_inv'); if(c) { try{ CSV_INV = JSON.parse(c); }catch{} }
+  }
+  if(!CSV_ITEMS.length){
+    const c=localStorage.getItem('csv_items'); if(c) { try{ CSV_ITEMS = JSON.parse(c); }catch{} }
+  }
+  // fallback to /data fetch
+  if(!CSV_INV.length){ try{ CSV_INV = await fetchCsv('data/invoices.csv'); localStorage.setItem('csv_inv', JSON.stringify(CSV_INV)); }catch(e){} }
+  if(!CSV_ITEMS.length){ try{ CSV_ITEMS = await fetchCsv('data/invoice_items.csv'); localStorage.setItem('csv_items', JSON.stringify(CSV_ITEMS)); }catch(e){} }
+}
+
+document.getElementById('fileInv').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  CSV_INV = parseCSV(await f.text());
+  localStorage.setItem('csv_inv', JSON.stringify(CSV_INV));
+  refresh();
+});
+document.getElementById('fileItems').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  CSV_ITEMS = parseCSV(await f.text());
+  localStorage.setItem('csv_items', JSON.stringify(CSV_ITEMS));
+  refresh();
+});
+document.getElementById('reloadBtn').onclick=async ()=>{ localStorage.removeItem('csv_inv'); localStorage.removeItem('csv_items'); CSV_INV=[]; CSV_ITEMS=[]; await loadData(); refresh(); };
+
+/* ========= RANGE HANDLING ========= */
+const rangeBtns = document.getElementById('rangeBtns');
+let curRange = 'today';
+rangeBtns.addEventListener('click', (e)=>{
+  const btn=e.target.closest('button[data-range]'); if(!btn) return;
+  [...rangeBtns.querySelectorAll('button')].forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); curRange = btn.dataset.range;
+  applyQuickRange(); refresh();
+});
+document.getElementById('applyCustom').onclick=()=>{ curRange='custom'; [...rangeBtns.querySelectorAll('button')].forEach(b=>b.classList.remove('active')); refresh(); };
+
+function getRange(){
+  if(curRange==='today'){ return {from: todayISO, to: todayISO}; }
+  if(curRange==='7d'){ return {from: addDays(todayISO,-6), to: todayISO}; }
+  if(curRange==='30d'){ return {from: addDays(todayISO,-29), to: todayISO}; }
+  if(curRange==='ytd'){ const y=new Date().getFullYear(); return {from: `${y}-01-01`, to: todayISO}; }
+  // custom
+  return {from: document.getElementById('fromDate').value || todayISO,
+          to:   document.getElementById('toDate').value   || todayISO};
+}
+function applyQuickRange(){
+  const r=getRange();
+  document.getElementById('fromDate').value=r.from;
+  document.getElementById('toDate').value=r.to;
+}
+
+/* ========= COMPUTE + RENDER ========= */
+function within(d,from,to){ return d>=from && d<=to; }
+function toNum(s){ return Number(s)||0; }
+
+let chartBar, chartPie;
+
+function refresh(){
+  if(!CSV_INV.length){ document.getElementById('kTotal').textContent='0.00'; return; }
+  const {from,to} = getRange();
+  document.getElementById('rangeLabel').textContent = `(${from} → ${to})`;
+
+  // Filter invoices
+  const invs = CSV_INV.filter(r => within((r.invoice_date||'').slice(0,10), from, to));
+  // Day sums
+  const days = {};
+  invs.forEach(r=>{
+    const day = (r.invoice_date||'').slice(0,10);
+    days[day] = (days[day]||0) + toNum(r.total_rs||r.total||0);
+  });
+  const dayLabels = Object.keys(days).sort();
+  const dayValues = dayLabels.map(d=> Number(days[d].toFixed(2)));
+
+  // KPIs
+  const total = dayValues.reduce((a,b)=>a+b,0);
+  const avgDay = dayValues.length ? total/dayValues.length : 0;
+  document.getElementById('kTotal').textContent = total.toFixed(2);
+  document.getElementById('kAvg').textContent   = avgDay.toFixed(2);
+  document.getElementById('kInv').textContent   = invs.length;
+
+  // Top item (by revenue) in range
+  const items = CSV_ITEMS.filter(r => invs.some(i => i.invoice_no===r.invoice_no));
+  const itemMap = {};
+  items.forEach(it=>{
+    const name = (it.item_name||it.name||'—').trim() || '—';
+    const amt = toNum(it.amount_rs||it.amount|| (toNum(it.qty)*toNum(it.price_rs)));
+    itemMap[name] = (itemMap[name]||0) + amt;
+  });
+  const top = Object.entries(itemMap).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+  document.getElementById('kTop').textContent = top;
+
+  // Charts
+  const ctx1 = document.getElementById('salesDay');
+  const ctx2 = document.getElementById('itemsPie');
+
+  if(chartBar) chartBar.destroy();
+  if(chartPie) chartPie.destroy();
+
+  chartBar = new Chart(ctx1, {
+    type: 'bar',
+    data: { labels: dayLabels, datasets: [{ label: 'Revenue (₹)', data: dayValues }] },
+    options: {
+      responsive:true,
+      scales: { y: { beginAtZero:true } },
+      plugins:{ legend:{ display:false } }
+    }
+  });
+
+  // pie top items (top 8 + others)
+  const entries = Object.entries(itemMap).sort((a,b)=>b[1]-a[1]);
+  const top8 = entries.slice(0,8);
+  const other = entries.slice(8).reduce((s,[_n,v])=>s+v,0);
+  if(other>0) top8.push(['Others',other]);
+  chartPie = new Chart(ctx2, {
+    type: 'pie',
+    data: {
+      labels: top8.map(x=>x[0]),
+      datasets:[{ data: top8.map(x=> Number(x[1].toFixed(2))) }]
+    },
+    options:{ responsive:true, plugins:{ legend:{ position:'bottom' } } }
+  });
+}
+
+/* ========= BOOT ========= */
+(async function(){
+  try{ await loadData(); }catch(e){}
+  applyQuickRange();
+  refresh();
 })();
 </script>
-</body></html>
+</body>
+</html>
