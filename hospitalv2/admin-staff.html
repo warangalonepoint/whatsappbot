@@ -1,0 +1,66 @@
+
+<!doctype html><html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Staff – Attendance (CSV Demo)</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="js/csv.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="banner"><a class="chip floating-toggle" href="admin.html">← Admin</a></header>
+  <section class="card">
+    <h2>Today’s Attendance</h2>
+    <div class="row">
+      <button class="btn" id="btnMarkAll">Mark all On Duty</button>
+      <a class="chip" href="seeder.html">Load sample staff</a>
+    </div>
+    <table id="tbl"></table>
+  </section>
+</div>
+<script>
+function iso(d){return new Date(d).toISOString().slice(0,10);}
+function render(){
+  const day = iso(new Date());
+  const staff = CsvDB.all('staff');
+  let att = CsvDB.all('staff_attendance').filter(a=>a.day===day);
+  // ensure a row exists
+  staff.forEach(s=>{
+    if(!att.find(a=>a.staff_id===s.id)){
+      CsvDB.insert('staff_attendance',{id:crypto.randomUUID(),staff_id:String(s.id),day,name:s.name,role:s.role,status:'On Duty',note:'',created_at:new Date().toISOString()});
+    }
+  });
+  att = CsvDB.all('staff_attendance').filter(a=>a.day===day);
+  const rows=[['Name','Role','Status','Note','Actions']]
+    .concat(att.map(a=>[a.name,a.role,
+      `<select data-id="${a.id}" class="sel"><option>On Duty</option><option>On Leave</option><option>Absent</option></select>`,
+      `<input data-note="${a.id}" value="${a.note||''}"/>`,
+      `<button class="chip save" data-save="${a.id}">Save</button>`]));
+  document.getElementById('tbl').innerHTML = rows.map((r,i)=>'<tr>'+r.map(c=>`<${i?'td':'th'}>${c}</${i?'td':'th'}>`).join('')+'</tr>').join('');
+  // set selects
+  att.forEach(a=>{
+    const el = document.querySelector(`select[data-id="${a.id}"]`);
+    if(el) el.value=a.status;
+  });
+}
+document.addEventListener('click',e=>{
+  if(e.target.matches('.save')){
+    const id = e.target.dataset.save;
+    const att = CsvDB.all('staff_attendance');
+    const row = att.find(x=>x.id===id); if(!row) return;
+    const sel = document.querySelector(`select[data-id="${id}"]`);
+    const note = document.querySelector(`input[data-note="${id}"]`);
+    row.status = sel.value; row.note = note.value; localStorage.setItem('csvdb.v1', JSON.stringify({**JSON.parse(localStorage.getItem('csvdb.v1')), 'staff_attendance': att}));
+    render();
+  }
+});
+document.getElementById('btnMarkAll').onclick=()=>{
+  const day = iso(new Date());
+  const att = CsvDB.all('staff_attendance').filter(a=>a.day===day);
+  att.forEach(a=> a.status='On Duty');
+  const db = JSON.parse(localStorage.getItem('csvdb.v1')); db['staff_attendance'] = CsvDB.all('staff_attendance'); localStorage.setItem('csvdb.v1', JSON.stringify(db));
+  render();
+};
+render();
+</script>
+</body></html>

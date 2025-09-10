@@ -1,112 +1,24 @@
-<!doctype html>
-<html lang="en" data-theme="light">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Bookings</title>
-  <link rel="icon" href="assets/logo.png"/>
-  <link rel="stylesheet" href="styles.css?v=32"/>
-  <style>
-    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
-    .field{display:flex;flex-direction:column;gap:6px}
-    input,select{padding:12px;border-radius:12px;border:1px solid rgba(0,0,0,.12)}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-top:1px solid rgba(0,0,0,.08);padding:8px 10px;text-align:left}
-    .btn{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:12px;cursor:pointer}
-    .chip{padding:6px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.1)}
-  </style>
-</head>
-<body>
-  <header class="banner">
-    <button id="themeToggle" class="floating-toggle" aria-label="Theme">🌙</button>
-  </header>
 
-  <section class="section">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <h2>Bookings</h2>
-      <span style="flex:1 1 auto"></span>
-      <a class="chip" href="admin.html">← Back to Supervisor</a>
-    </div>
-
-    <div class="grid mt12">
-      <div class="field"><label>Patient Name</label><input id="pName" placeholder="Patient name"/></div>
-      <div class="field"><label>Phone</label><input id="pPhone" placeholder="10-digit"/></div>
-      <div class="field"><label>Date</label><input id="bDate" type="date"/></div>
-      <div class="field"><label>Slot Time</label><input id="bTime" type="time"/></div>
-      <div class="field"><label>Status</label>
-        <select id="bStatus">
-          <option value="pending">Pending</option>
-          <option value="checked_in">Checked-in</option>
-          <option value="done">Done</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="mt12">
-      <button class="btn" id="createBtn">Create Token</button>
-    </div>
-  </section>
-
-  <section class="section">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <h3>Day List</h3>
-      <span style="flex:1 1 auto"></span>
-      <input id="day" type="date"/>
-      <button class="btn" id="loadBtn">Load</button>
-    </div>
-
-    <table class="mt12">
-      <thead>
-        <tr><th>Time</th><th>Patient</th><th>Phone</th><th>Status</th></tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-  </section>
-
-  <script type="module" src="js/fb.js"></script>
-  <script type="module">
-    // Theme
-    const t=document.getElementById('themeToggle');
-    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
-    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
-
-    const iso=d=>new Date(d).toISOString().slice(0,10);
-    const todayISO = iso(new Date());
-    document.getElementById('bDate').value = todayISO;
-    document.getElementById('day').value   = todayISO;
-
-    async function createBooking(){
-      const b={
-        patient_name:  document.getElementById('pName').value.trim(),
-        patient_phone: document.getElementById('pPhone').value.trim(),
-        booking_date:  document.getElementById('bDate').value || todayISO,
-        slot_time:     document.getElementById('bTime').value || '09:00',
-        status:        document.getElementById('bStatus').value || 'pending'
-      };
-      if(!b.patient_name){ alert('Enter patient name'); return; }
-      try{
-        await DB.createBooking(b);
-        alert('Token created ✔');
-        loadList();
-      }catch(e){ alert('Failed: '+e.message); }
-    }
-
-    async function loadList(){
-      const d=document.getElementById('day').value || todayISO;
-      const rows = await DB.listBookingsByDate(d);
-      const tb=document.getElementById('tbody'); tb.innerHTML='';
-      rows.forEach(r=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${r.slot_time||''}</td><td>${r.patient_name||''}</td><td>${r.patient_phone||''}</td><td>${r.status||'pending'}</td>`;
-        tb.appendChild(tr);
-      });
-    }
-
-    document.getElementById('createBtn').onclick=createBooking;
-    document.getElementById('loadBtn').onclick=loadList;
-
-    loadList();
-  </script>
-</body>
-</html>
+<!doctype html><html lang="en" data-theme="light">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Bookings – CSV Demo</title><link rel="stylesheet" href="styles.css"/><script src="js/csv.js"></script></head>
+<body><div class="wrap">
+<header class="banner"><a class="chip floating-toggle" href="admin.html">← Admin</a></header>
+<section class="card"><h2>Bookings</h2>
+  <div class="row"><button class="btn" id="add">Add Booking</button></div>
+  <table id="tbl"></table>
+</section></div>
+<script>
+function render(){
+  const rows=[['Token','Date','Time','Patient','Status']].concat(
+    CsvDB.all('bookings').map(b=>[b.token_no||'',b.booking_date||'',b.slot_time||'',b.patient_id||'',b.status||'pending'])
+  );
+  document.getElementById('tbl').innerHTML=rows.map((r,i)=>'<tr>'+r.map(c=>`<${i?'td':'th'}>${c}</${i?'td':'th'}>`).join('')+'</tr>').join('');
+}
+document.getElementById('add').onclick=()=>{
+  const id='b'+Math.random().toString(36).slice(2,8);
+  CsvDB.insert('bookings',{id,token_no:String((CsvDB.all('bookings').length||0)+1),booking_date:new Date().toISOString().slice(0,10),slot_time:'10:30',patient_id:'p1',status:'pending'});
+  render();
+}; render();
+</script>
+</body></html>

@@ -1,0 +1,3 @@
+id,staff_id,day,name,role,status,note,created_at
+a1,1,2025-09-10,Nurse A,Nurse,On Duty,,2025-09-10T10:00:00Z
+a2,2,2025-09-10,Nurse B,Nurse,On Leave,,2025-09-10T10:00:00Z

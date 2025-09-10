@@ -1,147 +1,28 @@
-<!doctype html>
-<html lang="en" data-theme="light">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Pharmacy – Reports</title>
-  <link rel="icon" href="assets/logo.png"/>
-  <link rel="stylesheet" href="styles.css?v=31"/>
-  <style>
-    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-top:1px solid rgba(0,0,0,.08);padding:8px 10px;text-align:left}
-    .right{text-align:right}
-    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    input,button{padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.12)}
-    .btn{background:var(--accent);color:#fff;border:none}
-  </style>
-</head>
-<body>
-  <header class="banner">
-    <button id="themeToggle" class="floating-toggle" aria-label="Theme">🌙</button>
-  </header>
 
-  <section class="section">
-    <div class="controls">
-      <h2>Pharmacy Reports</h2>
-      <span style="flex:1 1 auto"></span>
-      <label>From <input id="from" type="date"/></label>
-      <label>To <input id="to" type="date"/></label>
-      <button class="btn" id="loadBtn">Load</button>
-      <button class="btn" id="csvBtn">Export CSV</button>
-    </div>
-
-    <div class="kpi-grid mt12">
-      <div class="kpi panel--blue"><h4>Total (₹)</h4><div class="num" id="kTotal">0.00</div></div>
-      <div class="kpi panel--mint"><h4>Paid (₹)</h4><div class="num" id="kPaid">0.00</div></div>
-      <div class="kpi panel--rose"><h4>Balance (₹)</h4><div class="num" id="kBal">0.00</div></div>
-      <div class="kpi panel--lilac"><h4>Invoices</h4><div class="num" id="kCnt">0</div></div>
-    </div>
-
-    <div class="chart-wrap">
-      <div class="chart-title">Revenue by Day</div>
-      <canvas id="lineChart" height="180"></canvas>
-    </div>
-
-    <div class="mt16">
-      <table id="tbl">
-        <thead>
-          <tr>
-            <th>Date</th><th>Invoice #</th><th>Patient</th>
-            <th class="right">Total</th><th class="right">Paid</th><th class="right">Balance</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <script src="assets/chart.umd.min.js"></script>
-  <script type="module" src="js/fb.js"></script>
-  <script type="module">
-    // Theme toggle
-    const t=document.getElementById('themeToggle');
-    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
-    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
-
-    const iso=d=>new Date(d).toISOString().slice(0,10);
-    const money=n=>(+n||0).toFixed(2);
-
-    // Chart
-    const line=new Chart(document.getElementById('lineChart'),{
-      type:'line',
-      data:{labels:[],datasets:[{label:'Total (₹)',data:[],borderWidth:2,tension:.3}]},
-      options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}
-    });
-
-    function setDefaultsRange(){
-      const to=new Date(); const from=new Date(); from.setDate(to.getDate()-6);
-      document.getElementById('from').value=iso(from);
-      document.getElementById('to').value=iso(to);
-    }
-
-    async function load(){
-      const fromISO=document.getElementById('from').value;
-      const toISO=document.getElementById('to').value;
-      let rows=[];
-      try{
-        rows = await DB.listInvoicesBetween(fromISO,toISO);
-      }catch(e){
-        // fallback to local storage if offline
-        const arr=JSON.parse(localStorage.getItem('invoices')||'[]');
-        rows = arr.filter(x=>x.invoice_date>=fromISO && x.invoice_date<=toISO);
-      }
-
-      // KPIs
-      const total = rows.reduce((s,r)=>s+(+r.total_rs||0),0);
-      const paid  = rows.reduce((s,r)=>s+(+r.paid_rs||0),0);
-      const bal   = rows.reduce((s,r)=>s+(+r.balance_rs||0),0);
-      document.getElementById('kTotal').textContent=money(total);
-      document.getElementById('kPaid').textContent =money(paid);
-      document.getElementById('kBal').textContent  =money(bal);
-      document.getElementById('kCnt').textContent  =rows.length;
-
-      // Table
-      const tb=document.getElementById('tbody'); tb.innerHTML='';
-      rows.sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)).forEach(r=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`
-          <td>${r.invoice_date||''}</td>
-          <td>${r.invoice_no||''}</td>
-          <td>${r.patient_name||''}</td>
-          <td class="right">${money(r.total_rs)}</td>
-          <td class="right">${money(r.paid_rs)}</td>
-          <td class="right">${money(r.balance_rs)}</td>
-        `;
-        tb.appendChild(tr);
-      });
-
-      // Line chart by day
-      const byDay={};
-      rows.forEach(r=>{ const d=r.invoice_date; byDay[d]=(byDay[d]||0)+(+r.total_rs||0); });
-      const labels=Object.keys(byDay).sort();
-      line.data.labels=labels;
-      line.data.datasets[0].data=labels.map(d=>byDay[d]);
-      line.update();
-
-      // CSV export
-      document.getElementById('csvBtn').onclick=()=>{
-        const header=['date,invoice_no,patient,total,paid,balance'];
-        const rowsCsv = rows.map(r=>[
-          r.invoice_date||'', r.invoice_no||'', (r.patient_name||'').replaceAll(',',' '),
-          money(r.total_rs), money(r.paid_rs), money(r.balance_rs)
-        ].join(','));
-        const csv=[...header,...rowsCsv].join('\n');
-        const blob=new Blob([csv],{type:'text/csv'});
-        const a=document.createElement('a');
-        a.href=URL.createObjectURL(blob);
-        a.download=`pharmacy_${fromISO}_to_${toISO}.csv`;
-        a.click();
-      };
-    }
-
-    document.getElementById('loadBtn').onclick=load;
-    setDefaultsRange(); load();
-  </script>
-</body>
-</html>
+<!doctype html><html lang="en" data-theme="light">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Pharmacy Reports – CSV Demo</title><link rel="stylesheet" href="styles.css"/><script src="js/csv.js"></script></head>
+<body><div class="wrap">
+<header class="banner"><a class="chip floating-toggle" href="admin.html">← Admin</a></header>
+<section class="card"><h2>Sales Summary</h2>
+  <div class="row">
+    <div class="chip">Today ₹ <b id="t">0.00</b></div>
+    <div class="chip">MTD ₹ <b id="m">0.00</b></div>
+    <div class="chip">Invoices Today <b id="c">0</b></div>
+  </div>
+  <table id="tbl"></table>
+</section></div>
+<script>
+function fmt(n){return (Number(n)||0).toFixed(2);} function iso(d){return new Date(d).toISOString().slice(0,10);}
+(function(){
+  const inv = CsvDB.all('invoices'); const today=iso(new Date()); const month=today.slice(0,7);
+  const todays = inv.filter(i=> (i.invoice_date||'').slice(0,10)===today);
+  const mtd = inv.filter(i=> (i.invoice_date||'').slice(0,7)===month);
+  document.getElementById('t').textContent=fmt(todays.reduce((s,i)=>s+Number(i.total_rs||0),0));
+  document.getElementById('m').textContent=fmt(mtd.reduce((s,i)=>s+Number(i.total_rs||0),0));
+  document.getElementById('c').textContent=todays.length;
+  const rows=[['#','Date','Patient','Total']].concat(inv.map(i=>[i.invoice_no||'',i.invoice_date||'',i.patient_name||'',fmt(i.total_rs||0)]));
+  document.getElementById('tbl').innerHTML=rows.map((r,i)=>'<tr>'+r.map(c=>`<${i?'td':'th'}>${c}</${i?'td':'th'}>`).join('')+'</tr>').join('');
+})();
+</script>
+</body></html>

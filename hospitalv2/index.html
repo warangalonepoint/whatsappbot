@@ -1,66 +1,51 @@
-<!doctype html>
-<html lang="en" data-theme="light">
+
+<!doctype html><html lang="en" data-theme="light">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Dr. Charan Hospital – Portal</title>
-  <link rel="manifest" href="manifest.webmanifest"/>
-  <link rel="icon" href="assets/logo.png"/>
-  <link rel="stylesheet" href="styles.css?v=31"/>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Clinic PWA – CSV Demo</title>
+<link rel="icon" href="assets/logo.png"/>
+<link rel="stylesheet" href="styles.css"/>
+<script src="js/csv.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <!-- Banner -->
-    <header class="banner">
-      <button id="themeToggle" class="chip floating-toggle">🌙</button>
-    </header>
+<div class="wrap">
+  <header class="banner"><button id="theme" class="floating-toggle" aria-label="Theme">🌙</button></header>
 
-    <!-- Toolbar -->
-    <nav class="toolbar">
-      <a class="chip" href="login.html">🔐 Login</a>
-      <button id="clearCacheBtn" class="chip">Clear Cache</button>
-    </nav>
-
-    <!-- Welcome -->
-    <section class="section">
-      <h2>Welcome</h2>
-      <div class="tile-grid">
-        <a class="tile panel--lilac" href="dashboard.html">
-          <h3>Doctor Dashboard</h3>
-          <p>Patients, Follow-ups, Analytics</p>
-        </a>
-        <a class="tile panel--mint" href="admin.html">
-          <h3>Supervisor Console</h3>
-          <p>Bookings, Pharmacy, Staff</p>
-        </a>
+  <section class="card">
+    <h2>Welcome</h2>
+    <div class="grid">
+      <div class="card kpi">
+        <h3>Doctor Dashboard</h3>
+        <p class="small">Patients & follow‑ups, analytics (read‑only)</p>
+        <p><a class="btn" href="dashboard.html">Open</a></p>
       </div>
-      <p class="muted mt12">Demo PINs → Doctor: <b>4321</b>, Supervisor: <b>1111</b></p>
-    </section>
+      <div class="card kpi2">
+        <h3>Supervisor Console</h3>
+        <p class="small">Bookings, Billing & Reports, Staff (edit)</p>
+        <p><a class="btn" href="admin.html">Open</a></p>
+      </div>
+    </div>
+  </section>
 
-    <!-- System Check -->
-    <section class="section tint tint-lilac">
-      <h3>System Check</h3>
-      <p id="syscheck">⏳ Checking Firebase connection…</p>
-    </section>
-  </div>
+  <section class="card">
+    <h3>System Check</h3>
+    <p class="muted">Demo runs on CSV files stored locally (no cloud). Use <a href="seeder.html">Seeder</a> to preload sample data.</p>
+    <div class="row">
+      <a class="chip" href="patients.html">Patients</a>
+      <a class="chip" href="bookings.html">Bookings</a>
+      <a class="chip" href="pharmacy.html">Pharmacy</a>
+      <a class="chip" href="pharmacy-report.html">Reports</a>
+      <a class="chip" href="admin-staff.html">Staff</a>
+      <a class="chip" href="analytics.html">Analytics</a>
+      <a class="chip" href="seeder.html">Seeder</a>
+    </div>
+  </section>
 
-  <!-- Firebase -->
-  <script type="module" src="js/fb.js"></script>
-  <script type="module">
-    // Theme
-    const t=document.getElementById('themeToggle');
-    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
-    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
-
-    // Clear cache
-    clearCacheBtn.onclick=async()=>{localStorage.clear();sessionStorage.clear();if('caches' in window){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}alert('Cache cleared.');location.reload();};
-
-    // System check
-    (async()=>{
-      const el=document.getElementById('syscheck');
-      try{ const staff=await DB.listStaff(); el.textContent=`✅ Firebase connected (${staff.length} staff)`; el.style.color='green'; }
-      catch(e){ el.textContent=`❌ Firebase error: ${e.message}`; el.style.color='red'; }
-    })();
-  </script>
-</body>
-</html>
+  <p class="footerNote muted">Tip: toggle theme → top-right 🌙</p>
+</div>
+<script>
+  const t=document.getElementById('theme'); 
+  if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme; t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
+  t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const nxt=cur==='light'?'dark':'light';document.documentElement.dataset.theme=nxt;localStorage.theme=nxt;t.textContent=nxt==='light'?'🌞':'🌙';};
+</script>
+</body></html>

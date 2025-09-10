@@ -1,0 +1,2 @@
+id,invoice_no,invoice_date,patient_name,patient_phone,doctor_name,discount_pct,discount_rs,total_rs,paid_rs,balance_rs,created_by,created_at
+inv1,1001,2025-09-10,Ramesh,8888888881,Dr. Charan,0,0,500,500,0,supervisor,2025-09-10T12:00:00Z
