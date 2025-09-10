@@ -1,2 +1,6 @@
-id,invoice_no,invoice_date,patient_name,patient_phone,doctor_name,discount_pct,discount_rs,total_rs,paid_rs,balance_rs,created_by,created_at
-inv1,1001,2025-09-10,Ramesh,8888888881,Dr. Charan,0,0,500,500,0,supervisor,2025-09-10T12:00:00Z
+invoice_no,invoice_date,patient_name,patient_phone,doctor_name,discount_pct,discount_rs,total_rs,paid_rs,balance_rs
+INV-1001,2025-09-01,Ramesh,8888881111,Dr. Charan,0,0,500,500,0
+INV-1002,2025-09-02,Suresh,8888882222,Dr. Charan,5,0,950,950,0
+INV-1003,2025-09-03,Lakshmi,8888883333,Dr. Anita,0,50,1200,1000,200
+INV-1004,2025-09-04,Arjun,8888884444,Dr. Charan,0,0,750,750,0
+INV-1005,2025-09-05,Meena,8888885555,Dr. Anita,10,0,1350,1350,0
