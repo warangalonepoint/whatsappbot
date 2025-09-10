@@ -9,37 +9,42 @@
 
   <style>
     .wrap{max-width:940px;margin:0 auto}
-    .panel{background:var(--card-bg);border-radius:16px;box-shadow:var(--shadow);padding:18px;margin:12px}
-    .btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
-    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .panel{background:var(--card-bg);border-radius:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06);padding:16px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+    .btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:700;box-shadow:var(--shadow);cursor:pointer}
     .btn.ghost{background:transparent;color:var(--fg);border:1px solid rgba(0,0,0,.1)}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    textarea{width:100%;min-height:200px;border-radius:12px;border:1px solid rgba(0,0,0,.08);padding:12px;background:var(--bg);color:var(--fg)}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--t-blue);color:var(--c-blue);font-weight:700}
+    .btn.danger{background:#ef4444}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--t-blue);color:var(--c-blue);font-weight:600}
+    textarea#log{width:100%;min-height:220px;border-radius:12px;border:1px solid rgba(0,0,0,.1);padding:10px}
   </style>
 </head>
 <body>
   <div class="wrap">
+    <!-- Banner -->
     <header class="banner">
       <button id="themeToggle" class="floating-toggle" aria-label="Theme">🌙</button>
     </header>
 
     <section class="panel">
       <h2 style="margin-bottom:6px">Firestore Demo Seeder</h2>
-      <div class="muted" id="info">Today: <span id="today"></span></div>
-
-      <div class="row" style="margin:12px 0">
-        <button class="btn" id="btnSeedAll">Seed ALL</button>
-        <button class="btn ghost" id="btnStaff">Seed Staff</button>
-        <button class="btn ghost" id="btnAtt">Seed Attendance (today)</button>
-        <button class="btn ghost" id="btnBookings">Seed Bookings (today)</button>
-        <button class="btn ghost" id="btnInvoice">Seed Sample Invoice</button>
-        <button class="btn" id="btnWipe" style="background:#ef4444">Wipe Demo Data</button>
+      <div class="row" style="align-items:center">
+        <span>Today:</span>
+        <span id="today" class="pill"></span>
       </div>
 
-      <div class="row" style="align-items:center;margin:10px 0">
-        <span class="pill" id="chipStatus">Idle</span>
-        <button class="btn ghost" id="btnOpenConsole" title="Open Cloud Firestore in Console">Open Firestore Console</button>
+      <div class="row">
+        <button id="btnSeedAll" class="btn">Seed ALL</button>
+        <button id="btnStaff" class="btn ghost">Seed Staff</button>
+        <button id="btnAtt" class="btn ghost">Seed Attendance (today)</button>
+        <button id="btnBookings" class="btn ghost">Seed Bookings (today)</button>
+        <button id="btnInvoice" class="btn ghost">Seed Sample Invoice</button>
+        <button id="btnWipe" class="btn danger">Wipe Demo Data</button>
+      </div>
+
+      <div class="row" style="align-items:center">
+        <span id="chipStatus" class="pill">Idle</span>
+        <a class="btn ghost" target="_blank" href="https://console.firebase.google.com/">Open Firebase Console</a>
         <a class="btn ghost" href="index.html">← Back to Home</a>
       </div>
 
@@ -47,135 +52,182 @@
     </section>
   </div>
 
-  <!-- App logic -->
   <script type="module">
-    // Theme toggle
+    // ========= THEME =========
     const t=document.getElementById('themeToggle');
     if(localStorage.theme){ document.documentElement.dataset.theme=localStorage.theme; t.textContent=localStorage.theme==='light'?'🌞':'🌙'; }
     t.onclick=()=>{ const cur=document.documentElement.dataset.theme||'light'; const next=cur==='light'?'dark':'light'; document.documentElement.dataset.theme=next; localStorage.theme=next; t.textContent=next==='light'?'🌞':'🌙'; };
 
-    // Today label
-    const todayISO = new Date().toISOString().slice(0,10);
-    document.getElementById('today').textContent = todayISO;
+    // ========= DATE LABEL =========
+    const iso = d => new Date(d).toISOString().slice(0,10);
+    document.getElementById('today').textContent = iso(new Date());
 
-    // Import Firestore helpers from your fb.js
-    import { db, coll, add, q, whereEq, get, delDoc, serverTime } from './js/fb.js';
+    // ========= FIREBASE (CDN MODULES) =========
+    // 1) Copy your config from Firebase Console → Project settings → "Your apps" → Web app
+    const firebaseConfig = {
+      apiKey:        "PASTE_API_KEY",
+      authDomain:    "PASTE_PROJECT_ID.firebaseapp.com",
+      projectId:     "PASTE_PROJECT_ID",
+      storageBucket: "PASTE_PROJECT_ID.appspot.com",
+      messagingSenderId: "PASTE_SENDER_ID",
+      appId:         "PASTE_APP_ID"
+    };
 
-    const $ = (id)=>document.getElementById(id);
-    const log = (msg)=>{ const ta=$('log'); ta.value += `[${new Date().toLocaleTimeString()}] ${msg}\n`; ta.scrollTop = ta.scrollHeight; };
-    const busy = (yes)=>{ document.querySelectorAll('button').forEach(b=>b.disabled=yes); $('chipStatus').textContent = yes?'Working…':'Idle'; };
+    // 2) Import SDKs
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import {
+      getFirestore, collection, addDoc, setDoc, doc, getDocs, query, where, writeBatch, deleteDoc
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-    // Seeders
+    // 3) Init
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // ========= LOG HELPERS =========
+    const logEl   = document.getElementById('log');
+    const statusC = document.getElementById('chipStatus');
+    const log = (...args) => { logEl.value += args.join(' ') + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+    const setStatus = (s) => { statusC.textContent = s; };
+
+    // ========= SEEDERS =========
     async function seedStaff(){
-      const data = [
-        { name:'Nurse A', role:'Nurse', phone:'9999999991', active:true, createdAt: serverTime() },
-        { name:'Nurse B', role:'Nurse', phone:'9999999992', active:true, createdAt: serverTime() },
-        { name:'Pharmacist', role:'Pharmacist', phone:'9999999993', active:true, createdAt: serverTime() },
+      setStatus('Seeding staff…');
+      const staff = [
+        { name:'Nurse A', role:'Nurse', phone:'9999999991', active:true, created_at:new Date() },
+        { name:'Nurse B', role:'Nurse', phone:'9999999992', active:true, created_at:new Date() },
+        { name:'Pharmacist', role:'Pharmacist', phone:'9999999993', active:true, created_at:new Date() }
       ];
-      let n=0;
-      for(const row of data){
-        await add(coll('staff'), row);
-        n++; log(`✔ staff: ${row.name}`);
-      }
-      log(`✅ Seeded staff (${n})`);
+      const batch = writeBatch(db);
+      staff.forEach(s=>{
+        const id = crypto.randomUUID();
+        batch.set(doc(db,'staff',id), {...s, id});
+      });
+      await batch.commit();
+      log('✓ Staff seeded:', staff.length);
+      setStatus('Idle');
     }
 
-    async function seedAttendance(){
-      // Make a simple sheet for today
-      const data = [
-        { day: todayISO, name:'Nurse A', role:'Nurse', status:'On Duty',  checkIn:'09:00', createdAt: serverTime() },
-        { day: todayISO, name:'Nurse B', role:'Nurse', status:'On Leave',                   createdAt: serverTime() },
-        { day: todayISO, name:'Pharmacist', role:'Pharmacist', status:'On Duty', checkIn:'10:15', createdAt: serverTime() },
-      ];
-      let n=0;
-      for(const row of data){
-        await add(coll('staff_attendance'), row);
-        n++; log(`✔ attendance: ${row.name} – ${row.status}`);
-      }
-      log(`✅ Seeded attendance (${n}) for ${todayISO}`);
+    async function seedAttendanceToday(){
+      setStatus('Seeding attendance…');
+      const today = iso(new Date());
+      // read all staff
+      const snap = await getDocs(collection(db,'staff'));
+      if (snap.empty){ log('No staff yet. Seeding staff first…'); await seedStaff(); }
+      const snap2 = await getDocs(collection(db,'staff'));
+      const batch = writeBatch(db);
+      snap2.forEach(st => {
+        const data = st.data();
+        const id = crypto.randomUUID();
+        batch.set(doc(db,'staff_attendance', id), {
+          id,
+          staff_id: data.id || st.id,
+          day: today,
+          name: data.name,
+          role: data.role,
+          status: 'On Duty',
+          note: '',
+          created_at: new Date()
+        });
+      });
+      await batch.commit();
+      log('✓ Attendance seeded for', snap2.size, 'staff on', today);
+      setStatus('Idle');
     }
 
-    async function seedBookings(){
-      const data = [
-        { bookingDate: todayISO, slotTime:'10:00', tokenNo:1, status:'pending', patientName:'Rohit Kumar', patientPhone:'9999990001', source:'manual', createdAt: serverTime() },
-        { bookingDate: todayISO, slotTime:'10:20', tokenNo:2, status:'pending', patientName:'Swathi',      patientPhone:'9999990002', source:'manual', createdAt: serverTime() },
+    async function seedBookingsToday(){
+      setStatus('Seeding bookings…');
+      const today = iso(new Date());
+      const items = [
+        { patient:'Rahul',  phone:'9000000001', token:1, time:'09:15', status:'pending', date:today },
+        { patient:'Meena',  phone:'9000000002', token:2, time:'09:30', status:'pending', date:today },
+        { patient:'Arun',   phone:'9000000003', token:3, time:'09:45', status:'pending', date:today },
       ];
-      let n=0;
-      for(const row of data){
-        await add(coll('bookings'), row);
-        n++; log(`✔ booking: token ${row.tokenNo} – ${row.patientName}`);
-      }
-      log(`✅ Seeded bookings (${n}) for ${todayISO}`);
+      const batch = writeBatch(db);
+      items.forEach(b=>{
+        const id = crypto.randomUUID();
+        batch.set(doc(db,'bookings', id), {...b, id, created_at:new Date()});
+      });
+      await batch.commit();
+      log('✓ Bookings seeded:', items.length);
+      setStatus('Idle');
     }
 
     async function seedInvoice(){
-      const inv = {
-        invoiceNo: 'INV-001',
-        invoiceDate: todayISO,
-        patientName: 'Rohit Kumar',
-        patientPhone: '9999990001',
-        doctorName: 'Dr. Charan',
-        paymentMode: 'Cash',
-        discountPct: 0,
-        discountRs: 0,
-        totalRs: 250,
-        paidRs: 250,
-        balanceRs: 0,
-        items: [
-          { name:'Paracetamol 500', qty:1, price:50, amount:50 },
-          { name:'Cough Syrup',     qty:1, price:200, amount:200 },
-        ],
-        createdAt: serverTime()
-      };
-      await add(coll('invoices'), inv);
-      log(`✅ Seeded invoice ${inv.invoiceNo} (₹${inv.totalRs})`);
+      setStatus('Seeding invoice…');
+      const invoiceId = crypto.randomUUID();
+      await setDoc(doc(db,'invoices', invoiceId), {
+        id: invoiceId,
+        invoice_no: 'INV-DEMO-001',
+        invoice_date: iso(new Date()),
+        patient_name:'Demo Patient',
+        patient_phone:'9000000000',
+        doctor_name:'Dr. Charan',
+        discount_pct:0, discount_rs:0,
+        total_rs: 350.00, paid_rs:350.00, balance_rs:0,
+        created_at:new Date()
+      });
+      const items = [
+        { item_name:'Paracetamol 650mg', qty:1, price_rs:120, amount_rs:120 },
+        { item_name:'Cough Syrup 100ml', qty:1, price_rs:230, amount_rs:230 }
+      ];
+      const batch = writeBatch(db);
+      items.forEach(it=>{
+        const id = crypto.randomUUID();
+        batch.set(doc(db,'invoice_items', id), {...it, id, invoice_id: invoiceId});
+      });
+      await batch.commit();
+      log('✓ Invoice + items seeded.');
+      setStatus('Idle');
     }
 
     async function seedAll(){
-      busy(true);
       try{
-        log('—— Seeding ALL ——————————————————————');
+        setStatus('Running…');
         await seedStaff();
-        await seedAttendance();
-        await seedBookings();
+        await seedAttendanceToday();
+        await seedBookingsToday();
         await seedInvoice();
-        log('🎉 Done! Open pharmacy-report.html, staff.html, admin-staff.html to see data.');
-      }catch(e){
-        log(`❌ ERROR: ${e.message||e}`);
-        alert(`Seeding failed:\n${e.message||e}`);
-      }finally{
-        busy(false);
+        setStatus('Done');
+      }catch(err){
+        setStatus('Error');
+        log('✗ ERROR:', err.message || err);
+        alert('Seeding failed. Check the log box and your Firestore rules.');
       }
     }
 
-    // Danger: wipe demo data (all docs in these collections)
-    async function wipeAll(){
-      if(!confirm('This will delete ALL docs in staff, staff_attendance, bookings, invoices.\nAre you sure?')) return;
-      busy(true);
-      try{
-        for(const name of ['staff','staff_attendance','bookings','invoices']){
-          const snap = await get(q(coll(name)));
-          let n=0;
-          for(const d of snap.docs){ await delDoc(d.ref); n++; }
-          log(`🗑 cleared ${name}: ${n} docs`);
-        }
-        log('✅ Wipe finished');
-      }catch(e){
-        log(`❌ ERROR (wipe): ${e.message||e}`);
-        alert(`Wipe failed:\n${e.message||e}`);
-      }finally{
-        busy(false);
+    async function wipeDemo(){
+      if(!confirm('Delete ALL demo collections (staff, staff_attendance, bookings, invoices, invoice_items)?')) return;
+      setStatus('Wiping…');
+      const cols = ['staff','staff_attendance','bookings','invoices','invoice_items'];
+      for (const c of cols){
+        const snap = await getDocs(collection(db,c));
+        const batch = writeBatch(db);
+        snap.forEach(d=> batch.delete(doc(db,c,d.id)));
+        if(!snap.empty) await batch.commit();
+        log('• Cleared', c, `(deleted ${snap.size})`);
       }
+      setStatus('Idle');
+      log('✓ Wipe complete.');
     }
 
-    // Wire buttons
-    $('btnSeedAll').onclick = seedAll;
-    $('btnStaff').onclick = async()=>{ busy(true); try{ await seedStaff(); } finally{ busy(false); } };
-    $('btnAtt').onclick = async()=>{ busy(true); try{ await seedAttendance(); } finally{ busy(false); } };
-    $('btnBookings').onclick = async()=>{ busy(true); try{ await seedBookings(); } finally{ busy(false); } };
-    $('btnInvoice').onclick = async()=>{ busy(true); try{ await seedInvoice(); } finally{ busy(false); } };
-    $('btnWipe').onclick = wipeAll;
-    $('btnOpenConsole').onclick = ()=> window.open('https://console.firebase.google.com/u/0/project/_/firestore/data', '_blank');
+    // ========= BIND BUTTONS =========
+    document.getElementById('btnSeedAll').onclick = seedAll;
+    document.getElementById('btnStaff').onclick   = seedStaff;
+    document.getElementById('btnAtt').onclick     = seedAttendanceToday;
+    document.getElementById('btnBookings').onclick= seedBookingsToday;
+    document.getElementById('btnInvoice').onclick = seedInvoice;
+    document.getElementById('btnWipe').onclick    = wipeDemo;
+
+    // ========= QUICK SELF-TEST =========
+    try{
+      // quick write-read to prove rules/keys
+      const pingId = crypto.randomUUID();
+      await setDoc(doc(db,'_ping', pingId), {at:new Date().toISOString()});
+      log('✓ Connected to Firestore (ping ok).');
+    }catch(e){
+      log('✗ Firestore init error:', e.message || e);
+      alert('Firestore init failed. Check Firebase config in this page and Firestore Rules.');
+    }
   </script>
 </body>
 </html>
