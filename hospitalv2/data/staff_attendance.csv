@@ -1,3 +1,7 @@
-id,staff_id,day,name,role,status,note,created_at
-a1,1,2025-09-10,Nurse A,Nurse,On Duty,,2025-09-10T10:00:00Z
-a2,2,2025-09-10,Nurse B,Nurse,On Leave,,2025-09-10T10:00:00Z
+day,name,role,status,check_in,note
+2025-09-10,Nurse A,Nurse,On Duty,09:02,OP ward
+2025-09-10,Nurse B,Nurse,On Duty,09:10,Phlebotomy
+2025-09-10,Pharmacist,Pharmacist,On Duty,09:05,Front counter
+2025-09-10,Receptionist,Front Desk,On Duty,08:55,Tokens
+2025-09-10,Lab Tech,Lab,On Duty,09:20,Blood tests
+2025-09-10,Support,Attendant,On Leave,,Fever
