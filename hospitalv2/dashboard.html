@@ -7,152 +7,208 @@
   <link rel="icon" href="assets/logo.png"/>
   <link rel="stylesheet" href="styles.css"/>
 
+  <!-- CSV + Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <style>
-    .wrap{max-width:1100px;margin:0 auto}
+    .wrap{max-width:1120px;margin:0 auto}
     .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 12px}
     .chip{padding:10px 14px;border-radius:999px;background:var(--card-bg);border:1px solid rgba(0,0,0,.06);box-shadow:var(--shadow)}
     .section{background:var(--card-bg);margin:12px;padding:18px;border-radius:var(--radius);box-shadow:var(--shadow)}
-    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
-    .kpi{padding:14px;border-radius:14px;background:var(--t-blue);color:var(--c-blue);box-shadow:var(--shadow)}
-    .kpi:nth-child(2){background:var(--t-mint);color:var(--c-mint)}
-    .kpi:nth-child(3){background:var(--t-rose);color:var(--c-rose)}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:10px;border-bottom:1px solid rgba(0,0,0,.06);text-align:left}
-    th{opacity:.8}
+    .kpis{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .kpi{border-radius:16px;padding:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06)}
+    .kpi h4{font-size:14px;margin-bottom:6px;opacity:.85}
+    .kpi .num{font-size:28px;font-weight:800}
+    .filters{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}
+    .filters .chip.active{background:var(--accent);color:#fff;font-weight:700}
+    .row{display:grid;gap:16px;grid-template-columns:1fr}
+    @media (min-width:960px){.row{grid-template-columns:2fr 1fr}}
+    canvas{background:var(--card-bg);border-radius:16px;box-shadow:var(--shadow);padding:12px}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    th,td{padding:10px;border-bottom:1px solid rgba(0,0,0,.06)}
+    th{text-align:left}
     .muted{color:var(--muted)}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="banner">
-      <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
-    </header>
+<div class="wrap">
+  <!-- Banner -->
+  <header class="banner">
+    <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
+  </header>
 
-    <nav class="toolbar">
-      <a class="chip" href="index.html">← Home</a>
-      <button class="chip" id="btnForceRefresh">Force Refresh Cache</button>
-    </nav>
+  <!-- Actions -->
+  <nav class="toolbar">
+    <a class="chip" href="index.html">← Home</a>
+    <button id="btnRefresh" class="chip">Force Refresh Cache</button>
+  </nav>
 
-    <section class="section">
-      <h2 style="margin-bottom:8px;">Sales Analytics</h2>
-      <div class="kpis">
-        <div class="kpi">
-          <div class="muted">Today (₹)</div>
-          <div id="kpiToday" style="font-size:24px;font-weight:800">0.00</div>
-        </div>
-        <div class="kpi">
-          <div class="muted">This Month (₹)</div>
-          <div id="kpiMTD" style="font-size:24px;font-weight:800">0.00</div>
-        </div>
-        <div class="kpi">
-          <div class="muted">Invoices Today</div>
-          <div id="kpiCount" style="font-size:24px;font-weight:800">0</div>
-        </div>
+  <!-- Sales Analytics -->
+  <section class="section">
+    <h2 style="margin-bottom:10px;">Sales Analytics</h2>
+
+    <div class="kpis">
+      <div class="kpi panel--blue">
+        <h4>Today (₹)</h4><div class="num" id="kpiToday">0.00</div>
       </div>
-      <div class="muted" style="margin-top:8px">Source: ./data/invoices.csv & ./data/invoice_items.csv</div>
-    </section>
+      <div class="kpi panel--mint">
+        <h4>This Month (₹)</h4><div class="num" id="kpiMTD">0.00</div>
+      </div>
+      <div class="kpi panel--peach">
+        <h4>Invoices Today</h4><div class="num" id="kpiCnt">0</div>
+      </div>
+      <div class="kpi panel--lilac">
+        <h4>Top Item (Today)</h4><div class="num" id="kpiTop">—</div>
+      </div>
+    </div>
 
-    <section class="section">
-      <h3 style="margin-bottom:8px;">Staff (Today) — View only</h3>
-      <table id="tblStaff">
-        <thead>
-          <tr><th>Name</th><th>Role</th><th>Status</th><th>Note</th></tr>
-        </thead>
-        <tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
-      </table>
-      <div class="muted" style="margin-top:8px">Source: ./data/staff_attendance.csv</div>
-    </section>
-  </div>
+    <div class="filters">
+      <button class="chip" data-range="today">Today</button>
+      <button class="chip" data-range="7d">7D</button>
+      <button class="chip active" data-range="30d">30D</button>
+      <button class="chip" data-range="ytd">YTD</button>
+      <span class="muted" id="rangeLabel"></span>
+    </div>
 
-  <script>
-    // Theme toggle
-    const t=document.getElementById('themeToggle');
-    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙'}
-    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const nxt=cur==='light'?'dark':'light';document.documentElement.dataset.theme=nxt;localStorage.theme=nxt;t.textContent=nxt==='light'?'🌞':'🌙'}
+    <div class="row">
+      <div>
+        <h3 class="muted" style="margin:8px 0">Revenue by Day</h3>
+        <canvas id="chartLine" height="140"></canvas>
+      </div>
+      <div>
+        <h3 class="muted" style="margin:8px 0">Top Items (Share)</h3>
+        <canvas id="chartPie" height="140"></canvas>
+      </div>
+    </div>
 
-    // Force refresh / wipe caches + SW
-    document.getElementById('btnForceRefresh').onclick = async () => {
-      try{
-        if('serviceWorker' in navigator){
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map(r=>r.unregister()));
-        }
-        localStorage.clear();
-        if('caches' in window){
-          const keys = await caches.keys();
-          await Promise.all(keys.map(k=>caches.delete(k)));
-        }
-        alert('Cache & service worker cleared. The page will reload now.');
-        location.reload(true);
-      }catch(e){alert('Clear error: '+e.message)}
-    };
+    <p class="muted mt12">Source: <code>./data/invoices.csv</code> & <code>./data/invoice_items.csv</code></p>
+  </section>
 
-    // ---------- CSV helpers ----------
-    async function fetchCsv(path){
-      const res = await fetch(path, {cache:'no-store'});
-      if(!res.ok) throw new Error('Fetch failed: '+path);
-      const txt = await res.text();
-      return parseCsv(txt);
-    }
-    function parseCsv(text){
-      // very small CSV parser (handles simple cases, quoted commas)
-      const rows=[]; let i=0, cur='', inQ=false, row=[];
-      while(i<text.length){
-        const c=text[i++];
-        if(c==='\"'){ inQ=!inQ; }
-        else if(c===',' && !inQ){ row.push(cur); cur=''; }
-        else if((c==='\n' || c==='\r') && !inQ){
-          if(cur!=='' || row.length){ row.push(cur); rows.push(row); row=[]; cur=''; }
-        } else { cur+=c; }
-      }
-      if(cur!=='' || row.length) { row.push(cur); rows.push(row); }
-      const header = rows.shift().map(h=>h.trim());
-      return rows.filter(r=>r.length===header.length).map(r=>{
-        const obj={}; header.forEach((h,idx)=>obj[h]=r[idx]); return obj;
-      });
-    }
-    const fmt = n => (Number(n)||0).toFixed(2);
-    const dISO = d => new Date(d).toISOString().slice(0,10);
+  <!-- Staff Today (read-only) -->
+  <section class="section">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h2>Staff (Today) — View only</h2>
+      <div class="muted" id="attDate"></div>
+    </div>
+    <table class="mt12">
+      <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Note</th></tr></thead>
+      <tbody id="staffRows"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+    </table>
+    <p class="muted mt12">Source: <code>./data/staff_attendance.csv</code></p>
+  </section>
+</div>
 
-    // ---------- Load & render ----------
-    (async function(){
-      try{
-        const [invoices, items, att] = await Promise.all([
-          fetchCsv('./data/invoices.csv'),
-          fetchCsv('./data/invoice_items.csv'),
-          fetchCsv('./data/staff_attendance.csv')
-        ]);
+<script>
+/* ===== Theme + Force Refresh ===== */
+const t=document.getElementById('themeToggle');
+if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙'}
+t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const nxt=cur==='light'?'dark':'light';document.documentElement.dataset.theme=nxt;localStorage.theme=nxt;t.textContent=nxt==='light'?'🌞':'🌙'}
+document.getElementById('btnRefresh').onclick=async()=>{
+  try{
+    localStorage.clear();
+    if('caches' in window){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}
+    if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister()));}
+    alert('Cache cleared. Reloading…'); location.reload();
+  }catch(e){alert(e.message)}
+};
 
-        // KPIs
-        const today = dISO(new Date());
-        const monthStart = dISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+/* ===== CSV helpers ===== */
+async function loadCSV(url){
+  const r=await fetch(url,{cache:'no-cache'});
+  if(!r.ok) throw new Error('Fetch failed: '+url);
+  const txt=await r.text();
+  return new Promise(res=>Papa.parse(txt,{header:true,skipEmptyLines:true,complete:({data})=>res(data)}));
+}
+function parseMoney(v){const n=parseFloat(String(v||'').replace(/[, ]/g,''));return isNaN(n)?0:n;}
+function fmt(n){return (Number(n)||0).toFixed(2);}
+function iso(d){return new Date(d).toISOString().slice(0,10);}
 
-        const todaysInv = invoices.filter(i => (i.invoice_date||i.date)===today);
-        const mtdInv    = invoices.filter(i => (i.invoice_date||i.date) >= monthStart);
+/* ===== Analytics logic (shared with analytics.html style) ===== */
+const rangeBtns=[...document.querySelectorAll('.filters .chip')];
+let lineChart,pieChart;
 
-        const sum = arr => arr.reduce((s,i)=> s + Number(i.total_rs||i.total||0), 0);
-        document.getElementById('kpiToday').textContent = fmt(sum(todaysInv));
-        document.getElementById('kpiMTD').textContent   = fmt(sum(mtdInv));
-        document.getElementById('kpiCount').textContent = todaysInv.length;
+function setActiveRange(key){ rangeBtns.forEach(b=>b.classList.toggle('active',b.dataset.range===key)); }
+function rangeDates(key){
+  const today=new Date(); const end=iso(today); let start;
+  if(key==='today'){start=end}
+  else if(key==='7d'){const s=new Date(today);s.setDate(s.getDate()-6);start=iso(s)}
+  else if(key==='30d'){const s=new Date(today);s.setDate(s.getDate()-29);start=iso(s)}
+  else if(key==='ytd'){start=iso(new Date(today.getFullYear(),0,1))}
+  return {start,end};
+}
 
-        // Staff (today)
-        const tbody = document.querySelector('#tblStaff tbody');
-        tbody.innerHTML = '';
-        const todaysAtt = att.filter(a => (a.day||a.date)===today);
-        if(!todaysAtt.length){
-          tbody.innerHTML = '<tr><td colspan="4" class="muted">No data</td></tr>';
-        }else{
-          todaysAtt.forEach(a=>{
-            const tr=document.createElement('tr');
-            tr.innerHTML = `<td>${a.name||''}</td><td>${a.role||''}</td><td>${a.status||''}</td><td>${a.note||''}</td>`;
-            tbody.appendChild(tr);
-          });
-        }
-      }catch(e){
-        console.error(e);
-        alert('Error loading CSVs: '+e.message);
-      }
-    })();
-  </script>
+async function render(range='30d'){
+  setActiveRange(range);
+  const {start,end}=rangeDates(range);
+  document.getElementById('rangeLabel').textContent=`${start} → ${end}`;
+
+  const [invoices,items,attendance]=await Promise.all([
+    loadCSV('data/invoices.csv'),
+    loadCSV('data/invoice_items.csv'),
+    loadCSV('data/staff_attendance.csv')
+  ]);
+
+  // ===== KPIs =====
+  invoices.forEach(i=>{ i.invoice_date=(i.invoice_date||i.date||i.day||'').slice(0,10);
+                        i.total_rs=parseMoney(i.total_rs||i.total); });
+  const todayISO=iso(new Date());
+  const monthStart=iso(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const todays=invoices.filter(i=>i.invoice_date===todayISO);
+  const mtd=invoices.filter(i=>i.invoice_date>=monthStart);
+  document.getElementById('kpiToday').textContent=fmt(todays.reduce((s,i)=>s+i.total_rs,0));
+  document.getElementById('kpiMTD').textContent=fmt(mtd.reduce((s,i)=>s+i.total_rs,0));
+  document.getElementById('kpiCnt').textContent=todays.length;
+
+  // Top item today
+  const mapToday={};
+  items.filter(it=>(it.invoice_date||it.date||'').slice(0,10)===todayISO)
+       .forEach(it=>{
+         const name=it.item_name||it.name||'—';
+         const amt=parseMoney(it.amount_rs||it.amount||it.price_rs)*(parseFloat(it.qty||1)||1);
+         mapToday[name]=(mapToday[name]||0)+amt;
+       });
+  const topItem=Object.entries(mapToday).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
+  document.getElementById('kpiTop').textContent=topItem;
+
+  // ===== Charts =====
+  const inRange=invoices.filter(i=>i.invoice_date>=start && i.invoice_date<=end);
+  const dayMap={}; inRange.forEach(i=>{dayMap[i.invoice_date]=(dayMap[i.invoice_date]||0)+i.total_rs});
+  const labels=Object.keys(dayMap).sort();
+  const values=labels.map(d=>dayMap[d]);
+
+  const itemsRange=items.filter(it=>{
+    const d=(it.invoice_date||it.date||'').slice(0,10);
+    return d>=start && d<=end;
+  });
+  const pieMap={}; itemsRange.forEach(it=>{
+    const name=it.item_name||it.name||'—';
+    const amt=parseMoney(it.amount_rs||it.amount||it.price_rs)*(parseFloat(it.qty||1)||1);
+    pieMap[name]=(pieMap[name]||0)+amt;
+  });
+  const pieLabels=Object.keys(pieMap); const pieValues=pieLabels.map(k=>pieMap[k]);
+
+  if(lineChart) lineChart.destroy(); if(pieChart) pieChart.destroy();
+  lineChart=new Chart(document.getElementById('chartLine'),{
+    type:'line',data:{labels,datasets:[{label:'₹',data:values,tension:.3,fill:true}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+  });
+  pieChart=new Chart(document.getElementById('chartPie'),{
+    type:'doughnut',data:{labels:pieLabels,datasets:[{data:pieValues}]},
+    options:{plugins:{legend:{position:'bottom'}}}
+  });
+
+  // ===== Staff table (today) =====
+  const todayRows=attendance.filter(a=>(a.day||a.date||'').slice(0,10)===todayISO);
+  document.getElementById('attDate').textContent=todayISO;
+  const html=todayRows.map(a=>`<tr>
+    <td>${a.name||''}</td><td>${a.role||''}</td><td>${a.status||''}</td><td>${a.note||''}</td>
+  </tr>`).join('');
+  document.getElementById('staffRows').innerHTML=html||`<tr><td colspan="4" class="muted">No data</td></tr>`;
+}
+
+rangeBtns.forEach(b=>b.addEventListener('click',()=>render(b.dataset.range)));
+render(); // default 30D
+</script>
 </body>
 </html>
