@@ -1,21 +1,299 @@
-
-<!doctype html><html lang="en" data-theme="light">
+<!doctype html>
+<html lang="en" data-theme="light">
 <head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Supervisor Console – CSV Demo</title>
-<link rel="stylesheet" href="styles.css"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin – Staff & Attendance (CSV)</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=4"/>
+
+  <style>
+    .wrap{max-width:1140px;margin:0 auto}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 12px}
+    .chip{height:40px;padding:0 14px;border-radius:999px;background:var(--card-bg);
+      border:1px solid rgba(0,0,0,.06);box-shadow:var(--shadow);display:inline-flex;align-items:center}
+    .tabs{display:flex;gap:8px;margin:10px 12px}
+    .tab{padding:8px 14px;border-radius:999px;background:var(--t-blue);color:var(--c-blue);cursor:pointer;
+      border:1px solid rgba(0,0,0,.06)}
+    .tab.active{background:var(--accent);color:#fff;font-weight:700;box-shadow:0 6px 14px rgba(37,99,235,.25)}
+    .panel{border-radius:18px;background:var(--card-bg);padding:16px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.06);margin:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .btn{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:12px;box-shadow:var(--shadow);cursor:pointer;font-weight:700}
+    .btn.ghost{background:transparent;color:var(--fg);border:1px solid rgba(0,0,0,.08)}
+    .btn.danger{background:#ef4444}
+    .muted{color:var(--muted)}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    th,td{padding:10px 12px;border-bottom:1px solid rgba(0,0,0,.06);vertical-align:middle}
+    th{text-align:left}
+    input,select{height:38px;padding:6px 10px;border-radius:10px;border:1px solid rgba(0,0,0,.12);background:var(--card-bg);color:var(--fg)}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--t-mint);color:var(--c-mint);font-weight:700}
+    .hint{font-size:12px;color:var(--muted)}
+    .right{margin-left:auto}
+  </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="banner"><a class="chip floating-toggle" href="index.html">← Home</a></header>
-  <section class="card"><h2>Supervisor Console</h2>
-    <div class="grid">
-      <div class="card kpi"><h3>Bookings</h3><p><a class="btn" href="bookings.html">Open</a></p></div>
-      <div class="card kpi2"><h3>Pharmacy Billing</h3><p><a class="btn" href="pharmacy.html">Open</a></p></div>
-      <div class="card kpi3"><h3>Reports</h3><p><a class="btn" href="pharmacy-report.html">Open</a></p></div>
-      <div class="card" style="background:linear-gradient(135deg,var(--t-lilac),#cab8ff)"><h3>Staff – Attendance & Roster</h3><p><a class="btn" href="admin-staff.html">Open</a></p></div>
+  <!-- Banner -->
+  <header class="banner">
+    <button id="themeToggle" class="chip floating-toggle" aria-label="Theme">🌙</button>
+  </header>
+
+  <!-- Actions -->
+  <nav class="toolbar">
+    <a class="chip" href="index.html">← Admin Home</a>
+    <button id="clearCacheBtn" class="chip">Clear Cache</button>
+    <span class="chip">Mode: <b style="margin-left:6px">CSV Demo</b></span>
+  </nav>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="attendance">Attendance</button>
+    <button class="tab" data-tab="roster">Roster</button>
+  </div>
+
+  <!-- ATTENDANCE -->
+  <section id="attendance" class="panel">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin-right:10px">Staff & Attendance</h2>
+      <span class="badge" id="attDateBadge"></span>
+      <span class="right hint">Edits are saved locally. Export CSV to upload to <code>/data/staff_attendance.csv</code>.</span>
     </div>
-    <p class="footerNote muted">Use <a href="seeder.html">Seeder</a> to load sample CSV data.</p>
+
+    <div class="row" style="margin-bottom:12px">
+      <label class="muted">Date</label>
+      <input type="date" id="attDate"/>
+      <button id="btnReloadAtt" class="btn ghost">Reload</button>
+      <button id="btnCreateDaySheet" class="btn ghost">Create Day Sheet</button>
+      <button id="btnAddRow" class="btn ghost">Add Row</button>
+      <button id="btnMarkAll" class="btn ghost">Mark All On Duty</button>
+      <button id="btnSaveLocal" class="btn">Save Locally</button>
+      <button id="btnExportAtt" class="btn">Export CSV</button>
+    </div>
+
+    <div class="panel" style="padding:0">
+      <table>
+        <thead>
+          <tr><th style="width:24px">#</th><th>Name</th><th>Role</th><th>Status</th><th>Check-in</th><th>Note</th><th style="width:90px">Actions</th></tr>
+        </thead>
+        <tbody id="attTbody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ROSTER -->
+  <section id="roster" class="panel" style="display:none">
+    <div class="row" style="margin-bottom:10px">
+      <h2>Staff Roster</h2>
+      <span class="right hint">Export to <code>/data/staff.csv</code> to update server copy.</span>
+    </div>
+
+    <div class="row" style="margin-bottom:12px">
+      <button id="btnReloadRoster" class="btn ghost">Reload</button>
+      <button id="btnAddStaff" class="btn ghost">Add Staff</button>
+      <button id="btnSaveRosterLocal" class="btn">Save Locally</button>
+      <button id="btnExportRoster" class="btn">Export CSV</button>
+    </div>
+
+    <div class="panel" style="padding:0">
+      <table>
+        <thead>
+          <tr><th style="width:24px">#</th><th>Name</th><th>Role</th><th>Phone</th><th>Active</th><th style="width:90px">Actions</th></tr>
+        </thead>
+        <tbody id="rosterTbody"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
   </section>
 </div>
-</body></html>
+
+<script src="js/csv.js?v=4"></script>
+<script>
+  /* === Theme === */
+  const tBtn=document.getElementById('themeToggle');
+  if(localStorage.theme){ document.documentElement.dataset.theme=localStorage.theme; tBtn.textContent=localStorage.theme==='light'?'🌞':'🌙'; }
+  tBtn.onclick=()=>{ const cur=document.documentElement.dataset.theme||'light'; const next=cur==='light'?'dark':'light';
+    document.documentElement.dataset.theme=next; localStorage.theme=next; tBtn.textContent=next==='light'?'🌞':'🌙'; };
+
+  document.getElementById('clearCacheBtn').onclick=()=>{ CSV.clear(); localStorage.removeItem('attLocal'); localStorage.removeItem('rosterLocal'); alert('Cleared local CSV cache.'); };
+
+  /* === Tabs === */
+  const tabs=[...document.querySelectorAll('.tab')];
+  tabs.forEach(b=>b.addEventListener('click',()=>{
+    tabs.forEach(x=>x.classList.remove('active')); b.classList.add('active');
+    document.getElementById('attendance').style.display = b.dataset.tab==='attendance'?'block':'none';
+    document.getElementById('roster').style.display     = b.dataset.tab==='roster'?'block':'none';
+  }));
+
+  /* === Helpers === */
+  const toISO = d => new Date(d).toISOString().slice(0,10);
+  const todayISO = toISO(new Date());
+  const fmtTime = s => s||'';
+
+  function getLocal(key){ try{ return JSON.parse(localStorage.getItem(key)||'[]'); }catch{return [];} }
+  function setLocal(key,arr){ localStorage.setItem(key, JSON.stringify(arr||[])); }
+
+  function downloadCSV(filename, rows){
+    const header = Object.keys(rows[0]||{});
+    const csv = [header.join(',')].concat(rows.map(r=> header.map(h=>{
+      const v = (r[h]??'').toString().replaceAll('"','""');
+      return /[",\n]/.test(v) ? `"${v}"` : v;
+    }).join(','))).join('\n');
+    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), {href:url,download:filename});
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  /* === ATTENDANCE === */
+  const attDateInput = document.getElementById('attDate');
+  attDateInput.value = todayISO;
+  document.getElementById('attDateBadge').textContent = todayISO;
+
+  document.getElementById('btnReloadAtt').onclick = loadAttendance;
+  document.getElementById('btnCreateDaySheet').onclick = createDaySheet;
+  document.getElementById('btnAddRow').onclick = ()=> addAttRow({day:attDateInput.value,name:'',role:'',status:'On Duty',check_in:'',note:''});
+  document.getElementById('btnMarkAll').onclick = ()=> markAll('On Duty');
+  document.getElementById('btnSaveLocal').onclick = saveAttLocal;
+  document.getElementById('btnExportAtt').onclick = exportAtt;
+
+  async function loadAttendance(){
+    const day = attDateInput.value;
+    document.getElementById('attDateBadge').textContent = day;
+    const all = await CSV.load('staff_attendance');   // columns: day,name,role,status,check_in,note
+    const locals = getLocal('attLocal');              // [{day,...}]
+    const rows = all.filter(r=>toISO(new Date(r.day))===day)
+      .concat(locals.filter(r=>r.day===day && !all.some(x=>x.day===r.day && x.name===r.name)));
+    renderAtt(rows.sort((a,b)=> (a.role||'').localeCompare(b.role||'') || (a.name||'').localeCompare(b.name||'')));
+  }
+
+  function renderAtt(list){
+    const tb = document.getElementById('attTbody'); tb.innerHTML='';
+    if(!list.length){ tb.innerHTML='<tr><td colspan="7" class="muted">No data for this date.</td></tr>'; return; }
+    list.forEach((r,i)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i+1}</td>
+        <td><input value="${r.name||''}" data-f="name"/></td>
+        <td><input value="${r.role||''}" data-f="role"/></td>
+        <td>
+          <select data-f="status">
+            <option ${r.status==='On Duty'?'selected':''}>On Duty</option>
+            <option ${r.status==='On Leave'?'selected':''}>On Leave</option>
+            <option ${r.status==='Absent'?'selected':''}>Absent</option>
+          </select>
+        </td>
+        <td><input value="${fmtTime(r.check_in)}" data-f="check_in" placeholder="09:00"/></td>
+        <td><input value="${r.note||''}" data-f="note"/></td>
+        <td><button class="btn ghost btnDel">Delete</button></td>`;
+      // wire
+      tr.querySelectorAll('input,select').forEach(el=>{
+        el.addEventListener('change',()=>{ r[el.dataset.f]=el.value; saveAttLocal(false); });
+      });
+      tr.querySelector('.btnDel').onclick=()=>{ tr.remove(); saveAttLocal(false); };
+      tb.appendChild(tr);
+    });
+  }
+
+  async function createDaySheet(){
+    const roster = await loadRoster(true);
+    const day = attDateInput.value;
+    const rows = roster.filter(s=> (s.active??'true')!=='false').map(s=> ({
+      day, name:s.name||'', role:s.role||'', status:'On Duty', check_in:'', note:''
+    }));
+    renderAtt(rows);
+    saveAttLocal(false);
+  }
+
+  function collectAttRows(){
+    const day = attDateInput.value;
+    const rows=[];
+    document.querySelectorAll('#attTbody tr').forEach(tr=>{
+      const cells = tr.querySelectorAll('[data-f]');
+      if(!cells.length) return;
+      const row={day};
+      cells.forEach(el=> row[el.dataset.f]=el.value);
+      if(row.name?.trim()) rows.push(row);
+    });
+    return rows;
+  }
+
+  function addAttRow(obj){ const list = collectAttRows(); list.push(obj); renderAtt(list); saveAttLocal(false); }
+  function markAll(status){ const list = collectAttRows().map(r=>({...r,status})); renderAtt(list); saveAttLocal(false); }
+
+  function saveAttLocal(show=true){
+    const all = getLocal('attLocal').filter(r=>r.day!==attDateInput.value);
+    const rows = collectAttRows();
+    setLocal('attLocal', all.concat(rows));
+    if(show) alert('Saved locally.');
+  }
+
+  function exportAtt(){
+    const rows = collectAttRows();
+    if(!rows.length){ alert('Nothing to export.'); return; }
+    downloadCSV('staff_attendance.csv', rows);
+  }
+
+  /* === ROSTER === */
+  document.getElementById('btnReloadRoster').onclick = ()=> loadRoster(false);
+  document.getElementById('btnAddStaff').onclick = ()=> addStaffRow({name:'',role:'',phone:'',active:'true'});
+  document.getElementById('btnSaveRosterLocal').onclick = saveRosterLocal;
+  document.getElementById('btnExportRoster').onclick = exportRoster;
+
+  async function loadRoster(returnOnly=false){
+    const base = await CSV.load('staff'); // columns: name,role,phone,active
+    const locals = getLocal('rosterLocal');
+    const map = new Map();
+    base.forEach(r=> map.set((r.name||'')+'|'+(r.phone||''), r));
+    locals.forEach(r=> map.set((r.name||'')+'|'+(r.phone||''), r));
+    const arr = Array.from(map.values()).sort((a,b)=> (a.role||'').localeCompare(b.role||'') || (a.name||'').localeCompare(b.name||''));
+    if(returnOnly) return arr;
+    renderRoster(arr);
+  }
+
+  function renderRoster(list){
+    const tb = document.getElementById('rosterTbody'); tb.innerHTML='';
+    if(!list.length){ tb.innerHTML='<tr><td colspan="6" class="muted">No staff yet.</td></tr>'; return; }
+    list.forEach((r,i)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`
+        <td>${i+1}</td>
+        <td><input value="${r.name||''}" data-f="name"/></td>
+        <td><input value="${r.role||''}" data-f="role"/></td>
+        <td><input value="${r.phone||''}" data-f="phone" placeholder="10-digit"/></td>
+        <td>
+          <select data-f="active">
+            <option value="true"  ${(r.active??'true')!=='false'?'selected':''}>Yes</option>
+            <option value="false" ${(r.active??'true')==='false'?'selected':''}>No</option>
+          </select>
+        </td>
+        <td><button class="btn ghost btnDel">Delete</button></td>`;
+      tr.querySelectorAll('input,select').forEach(el=>{
+        el.addEventListener('change',()=>{ r[el.dataset.f]=el.value; saveRosterLocal(false); });
+      });
+      tr.querySelector('.btnDel').onclick=()=>{ tr.remove(); saveRosterLocal(false); };
+      tb.appendChild(tr);
+    });
+  }
+
+  function collectRoster(){ 
+    const rows=[]; 
+    document.querySelectorAll('#rosterTbody tr').forEach(tr=>{
+      const cells=tr.querySelectorAll('[data-f]');
+      if(!cells.length) return;
+      const r={}; cells.forEach(el=> r[el.dataset.f]=el.value);
+      if(r.name?.trim()) rows.push(r);
+    }); 
+    return rows;
+  }
+
+  function addStaffRow(r){ const rows = collectRoster(); rows.push(r); renderRoster(rows); saveRosterLocal(false); }
+  function saveRosterLocal(show=true){ setLocal('rosterLocal', collectRoster()); if(show) alert('Saved locally.'); }
+  function exportRoster(){ const rows = collectRoster(); if(!rows.length){alert('Nothing to export.');return;} downloadCSV('staff.csv', rows); }
+
+  /* === Boot === */
+  (async function init(){
+    await loadAttendance();
+    await loadRoster(false);
+  })();
+</script>
+</body>
+</html>
