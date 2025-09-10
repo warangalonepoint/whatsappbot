@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Seeder – Dr. Charan Hospital (Firestore Demo)</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css"/>
+
+  <style>
+    .wrap{max-width:940px;margin:0 auto}
+    .panel{background:var(--card-bg);border-radius:16px;box-shadow:var(--shadow);padding:18px;margin:12px}
+    .btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .btn.ghost{background:transparent;color:var(--fg);border:1px solid rgba(0,0,0,.1)}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    textarea{width:100%;min-height:200px;border-radius:12px;border:1px solid rgba(0,0,0,.08);padding:12px;background:var(--bg);color:var(--fg)}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--t-blue);color:var(--c-blue);font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="banner">
+      <button id="themeToggle" class="floating-toggle" aria-label="Theme">🌙</button>
+    </header>
+
+    <section class="panel">
+      <h2 style="margin-bottom:6px">Firestore Demo Seeder</h2>
+      <div class="muted" id="info">Today: <span id="today"></span></div>
+
+      <div class="row" style="margin:12px 0">
+        <button class="btn" id="btnSeedAll">Seed ALL</button>
+        <button class="btn ghost" id="btnStaff">Seed Staff</button>
+        <button class="btn ghost" id="btnAtt">Seed Attendance (today)</button>
+        <button class="btn ghost" id="btnBookings">Seed Bookings (today)</button>
+        <button class="btn ghost" id="btnInvoice">Seed Sample Invoice</button>
+        <button class="btn" id="btnWipe" style="background:#ef4444">Wipe Demo Data</button>
+      </div>
+
+      <div class="row" style="align-items:center;margin:10px 0">
+        <span class="pill" id="chipStatus">Idle</span>
+        <button class="btn ghost" id="btnOpenConsole" title="Open Cloud Firestore in Console">Open Firestore Console</button>
+        <a class="btn ghost" href="index.html">← Back to Home</a>
+      </div>
+
+      <textarea id="log" readonly></textarea>
+    </section>
+  </div>
+
+  <!-- App logic -->
+  <script type="module">
+    // Theme toggle
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){ document.documentElement.dataset.theme=localStorage.theme; t.textContent=localStorage.theme==='light'?'🌞':'🌙'; }
+    t.onclick=()=>{ const cur=document.documentElement.dataset.theme||'light'; const next=cur==='light'?'dark':'light'; document.documentElement.dataset.theme=next; localStorage.theme=next; t.textContent=next==='light'?'🌞':'🌙'; };
+
+    // Today label
+    const todayISO = new Date().toISOString().slice(0,10);
+    document.getElementById('today').textContent = todayISO;
+
+    // Import Firestore helpers from your fb.js
+    import { db, coll, add, q, whereEq, get, delDoc, serverTime } from './js/fb.js';
+
+    const $ = (id)=>document.getElementById(id);
+    const log = (msg)=>{ const ta=$('log'); ta.value += `[${new Date().toLocaleTimeString()}] ${msg}\n`; ta.scrollTop = ta.scrollHeight; };
+    const busy = (yes)=>{ document.querySelectorAll('button').forEach(b=>b.disabled=yes); $('chipStatus').textContent = yes?'Working…':'Idle'; };
+
+    // Seeders
+    async function seedStaff(){
+      const data = [
+        { name:'Nurse A', role:'Nurse', phone:'9999999991', active:true, createdAt: serverTime() },
+        { name:'Nurse B', role:'Nurse', phone:'9999999992', active:true, createdAt: serverTime() },
+        { name:'Pharmacist', role:'Pharmacist', phone:'9999999993', active:true, createdAt: serverTime() },
+      ];
+      let n=0;
+      for(const row of data){
+        await add(coll('staff'), row);
+        n++; log(`✔ staff: ${row.name}`);
+      }
+      log(`✅ Seeded staff (${n})`);
+    }
+
+    async function seedAttendance(){
+      // Make a simple sheet for today
+      const data = [
+        { day: todayISO, name:'Nurse A', role:'Nurse', status:'On Duty',  checkIn:'09:00', createdAt: serverTime() },
+        { day: todayISO, name:'Nurse B', role:'Nurse', status:'On Leave',                   createdAt: serverTime() },
+        { day: todayISO, name:'Pharmacist', role:'Pharmacist', status:'On Duty', checkIn:'10:15', createdAt: serverTime() },
+      ];
+      let n=0;
+      for(const row of data){
+        await add(coll('staff_attendance'), row);
+        n++; log(`✔ attendance: ${row.name} – ${row.status}`);
+      }
+      log(`✅ Seeded attendance (${n}) for ${todayISO}`);
+    }
+
+    async function seedBookings(){
+      const data = [
+        { bookingDate: todayISO, slotTime:'10:00', tokenNo:1, status:'pending', patientName:'Rohit Kumar', patientPhone:'9999990001', source:'manual', createdAt: serverTime() },
+        { bookingDate: todayISO, slotTime:'10:20', tokenNo:2, status:'pending', patientName:'Swathi',      patientPhone:'9999990002', source:'manual', createdAt: serverTime() },
+      ];
+      let n=0;
+      for(const row of data){
+        await add(coll('bookings'), row);
+        n++; log(`✔ booking: token ${row.tokenNo} – ${row.patientName}`);
+      }
+      log(`✅ Seeded bookings (${n}) for ${todayISO}`);
+    }
+
+    async function seedInvoice(){
+      const inv = {
+        invoiceNo: 'INV-001',
+        invoiceDate: todayISO,
+        patientName: 'Rohit Kumar',
+        patientPhone: '9999990001',
+        doctorName: 'Dr. Charan',
+        paymentMode: 'Cash',
+        discountPct: 0,
+        discountRs: 0,
+        totalRs: 250,
+        paidRs: 250,
+        balanceRs: 0,
+        items: [
+          { name:'Paracetamol 500', qty:1, price:50, amount:50 },
+          { name:'Cough Syrup',     qty:1, price:200, amount:200 },
+        ],
+        createdAt: serverTime()
+      };
+      await add(coll('invoices'), inv);
+      log(`✅ Seeded invoice ${inv.invoiceNo} (₹${inv.totalRs})`);
+    }
+
+    async function seedAll(){
+      busy(true);
+      try{
+        log('—— Seeding ALL ——————————————————————');
+        await seedStaff();
+        await seedAttendance();
+        await seedBookings();
+        await seedInvoice();
+        log('🎉 Done! Open pharmacy-report.html, staff.html, admin-staff.html to see data.');
+      }catch(e){
+        log(`❌ ERROR: ${e.message||e}`);
+        alert(`Seeding failed:\n${e.message||e}`);
+      }finally{
+        busy(false);
+      }
+    }
+
+    // Danger: wipe demo data (all docs in these collections)
+    async function wipeAll(){
+      if(!confirm('This will delete ALL docs in staff, staff_attendance, bookings, invoices.\nAre you sure?')) return;
+      busy(true);
+      try{
+        for(const name of ['staff','staff_attendance','bookings','invoices']){
+          const snap = await get(q(coll(name)));
+          let n=0;
+          for(const d of snap.docs){ await delDoc(d.ref); n++; }
+          log(`🗑 cleared ${name}: ${n} docs`);
+        }
+        log('✅ Wipe finished');
+      }catch(e){
+        log(`❌ ERROR (wipe): ${e.message||e}`);
+        alert(`Wipe failed:\n${e.message||e}`);
+      }finally{
+        busy(false);
+      }
+    }
+
+    // Wire buttons
+    $('btnSeedAll').onclick = seedAll;
+    $('btnStaff').onclick = async()=>{ busy(true); try{ await seedStaff(); } finally{ busy(false); } };
+    $('btnAtt').onclick = async()=>{ busy(true); try{ await seedAttendance(); } finally{ busy(false); } };
+    $('btnBookings').onclick = async()=>{ busy(true); try{ await seedBookings(); } finally{ busy(false); } };
+    $('btnInvoice').onclick = async()=>{ busy(true); try{ await seedInvoice(); } finally{ busy(false); } };
+    $('btnWipe').onclick = wipeAll;
+    $('btnOpenConsole').onclick = ()=> window.open('https://console.firebase.google.com/u/0/project/_/firestore/data', '_blank');
+  </script>
+</body>
+</html>
