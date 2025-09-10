@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Sales Analytics</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <link rel="stylesheet" href="styles.css?v=32"/>
+  <style>
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .controls input, .controls button{padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,.12)}
+    .btn{background:var(--accent);color:#fff;border:none}
+  </style>
+</head>
+<body>
+  <header class="banner">
+    <button id="themeToggle" class="floating-toggle" aria-label="Theme">🌙</button>
+  </header>
+
+  <section class="section">
+    <div class="controls">
+      <h2>Sales Analytics</h2>
+      <span style="flex:1 1 auto"></span>
+      <label>From <input id="from" type="date"/></label>
+      <label>To <input id="to" type="date"/></label>
+      <button class="btn" id="loadBtn">Load</button>
+    </div>
+
+    <div class="kpi-grid mt12">
+      <div class="kpi panel--blue"><h4>Total (₹)</h4><div class="num" id="kTotal">0.00</div></div>
+      <div class="kpi panel--lilac"><h4>Avg / Day (₹)</h4><div class="num" id="kAvg">0.00</div></div>
+      <div class="kpi panel--mint"><h4>Invoices</h4><div class="num" id="kCnt">0</div></div>
+      <div class="kpi panel--rose"><h4>Top Item</h4><div class="num" id="kTop">—</div></div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-title">Revenue by Day</div>
+      <canvas id="lineChart" height="180"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Top Items (Share)</div>
+      <canvas id="pieChart" height="180"></canvas>
+    </div>
+  </section>
+
+  <script src="assets/chart.umd.min.js"></script>
+  <script type="module" src="js/fb.js"></script>
+  <script type="module">
+    // Theme
+    const t=document.getElementById('themeToggle');
+    if(localStorage.theme){document.documentElement.dataset.theme=localStorage.theme;t.textContent=localStorage.theme==='light'?'🌞':'🌙';}
+    t.onclick=()=>{const cur=document.documentElement.dataset.theme||'light';const next=cur==='light'?'dark':'light';document.documentElement.dataset.theme=next;localStorage.theme=next;t.textContent=next==='light'?'🌞':'🌙';};
+
+    const iso=d=>new Date(d).toISOString().slice(0,10);
+    const money=n=>(+n||0).toFixed(2);
+
+    function setDefaultsRange(){
+      const to=new Date(); const from=new Date(); from.setDate(to.getDate()-29);
+      document.getElementById('from').value=iso(from);
+      document.getElementById('to').value=iso(to);
+    }
+
+    // Charts
+    const line=new Chart(document.getElementById('lineChart'),{
+      type:'line',
+      data:{labels:[],datasets:[{label:'Revenue',data:[],borderWidth:2,tension:.3}]},
+      options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}
+    });
+    const pie=new Chart(document.getElementById('pieChart'),{
+      type:'pie',
+      data:{labels:[],datasets:[{data:[]}]},
+      options:{responsive:true,maintainAspectRatio:false}
+    });
+
+    async function load(){
+      const fromISO=document.getElementById('from').value;
+      const toISO  =document.getElementById('to').value;
+      let rows=[];
+      try{
+        rows = await DB.listInvoicesBetween(fromISO,toISO);
+      }catch(e){
+        const arr=JSON.parse(localStorage.getItem('invoices')||'[]');
+        rows = arr.filter(x=>x.invoice_date>=fromISO && x.invoice_date<=toISO);
+      }
+
+      // KPIs
+      const total = rows.reduce((s,r)=>s+(+r.total_rs||0),0);
+      const days  = Math.max(1, Math.round((new Date(toISO)-new Date(fromISO))/86400000)+1);
+      const avg   = total / days;
+      const count = rows.length;
+
+      // Top item
+      const itemsAgg={};
+      rows.forEach(r=>(r.items||[]).forEach(it=>{
+        const name=it.item_name||it.name||'Item';
+        const amt=(+it.qty||0)*(+it.price_rs||it.price||0);
+        itemsAgg[name]=(itemsAgg[name]||0)+amt;
+      }));
+      const top = Object.entries(itemsAgg).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+
+      document.getElementById('kTotal').textContent = money(total);
+      document.getElementById('kAvg').textContent   = money(avg);
+      document.getElementById('kCnt').textContent   = count;
+      document.getElementById('kTop').textContent   = top;
+
+      // Line (by day)
+      const byDay={};
+      rows.forEach(r=>{ const d=r.invoice_date; byDay[d]=(byDay[d]||0)+(+r.total_rs||0); });
+      const labels=Object.keys(byDay).sort();
+      line.data.labels=labels;
+      line.data.datasets[0].data=labels.map(d=>byDay[d]);
+      line.update();
+
+      // Pie
+      const pLabels=Object.keys(itemsAgg);
+      const pVals  =Object.values(itemsAgg);
+      pie.data.labels=pLabels.length?pLabels:['No data'];
+      pie.data.datasets[0].data=pVals.length?pVals:[1];
+      pie.update();
+    }
+
+    document.getElementById('loadBtn').onclick=load;
+    setDefaultsRange(); load();
+  </script>
+</body>
+</html>
