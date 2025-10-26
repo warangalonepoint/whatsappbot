@@ -1,4 +1,0 @@
-id,name,role,phone,active,created_at
-1,Nurse A,Nurse,9999999991,true,2025-09-10T09:00:00Z
-2,Nurse B,Nurse,9999999992,true,2025-09-10T09:05:00Z
-3,Pharmacist,Pharmacist,9999999993,true,2025-09-10T09:10:00Z

@@ -1,2 +1,0 @@
-id,patient_id,booking_date,slot_time,token_no,source,status,created_by,created_at
-b1,p1,2025-09-11,10:30,1,manual,pending,supervisor,2025-09-10T11:30:00Z

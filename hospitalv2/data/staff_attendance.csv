@@ -1,7 +1,0 @@
-day,name,role,status,check_in,note
-2025-09-10,Nurse A,Nurse,On Duty,09:02,OP ward
-2025-09-10,Nurse B,Nurse,On Duty,09:10,Phlebotomy
-2025-09-10,Pharmacist,Pharmacist,On Duty,09:05,Front counter
-2025-09-10,Receptionist,Front Desk,On Duty,08:55,Tokens
-2025-09-10,Lab Tech,Lab,On Duty,09:20,Blood tests
-2025-09-10,Support,Attendant,On Leave,,Fever
