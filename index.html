@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!-- Core config / DB (optional but used for branding) -->
+  <script src="./config/config.js"></script>
+  <script src="./scripts/db.js"></script>
+
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Clinic PWA · Welcome</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <style>
+    /* ===== v8 pastel system (kept consistent) ===== */
+    :root{
+      --bg-gradient: linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+      --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --pink:#FBD6E3; --teal:#C8F5E4; --amber:#FFE9B3; --gray:#f4f4f5;
+      --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+      --r:18px; --shadow:0 6px 18px rgba(0,0,0,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:15px/1.5 system-ui;background:var(--bg-gradient);color:var(--ink)}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+
+    /* Header */
+    .header{
+      display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+      background:#D6E5DDcc;border:1px solid #0001;border-radius:12px;margin-top:10px;box-shadow:var(--shadow)
+    }
+    .header .logo{height:42px}
+    .brand{
+      display:flex;flex-direction:column;gap:2px
+    }
+    .brand .name{font-weight:900}
+    .brand .tag{font-size:12px;color:var(--muted)}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:600;cursor:pointer}
+    .btn:hover{background:#f1f5f9}
+
+    /* Banner */
+    .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:#DED8F2}
+    .banner img{width:100%;transform:scale(.65);transform-origin:center;border-radius:var(--r);display:block;mix-blend-mode:multiply;opacity:.95}
+
+    /* Tiles */
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:16px}
+    .tile{border-radius:var(--r);padding:18px;text-align:left;box-shadow:var(--shadow);transition:.25s transform ease; cursor:pointer; border:1px solid #0001}
+    .tile:hover{transform:translateY(-4px)}
+    .tile h3{margin:4px 0 6px 0}
+    .tile p{margin:0;color:var(--muted);font-size:13px}
+    .badge{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+
+    .doctor{background:var(--mint)}
+    .supervisor{background:var(--peach)}
+    .front{background:var(--lav)}
+    .settings{background:var(--teal)}
+
+    /* Footer */
+    .footer{text-align:center;padding:16px 4px;font-size:13px;color:var(--muted);margin:22px 0 14px}
+
+    /* PIN modal */
+    .modal-backdrop{
+      position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.25);
+      backdrop-filter:blur(2px);z-index:50
+    }
+    .modal-backdrop.show{display:flex}
+    .modal{width:min(420px,92vw);background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:14px}
+    .modal h4{margin:0 0 8px 0}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .input{border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;width:100%;font-size:16px}
+    .muted{color:#64748b;font-size:12px}
+    .error{color:#b91c1c;font-size:12px;margin-top:6px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Header -->
+  <div class="header">
+    <img id="hdrLogo" class="logo" src="./assets/logo.png" alt="logo">
+    <div class="brand">
+      <div id="clinicName" class="name">Clinic</div>
+      <div id="clinicTag" class="tag">Welcome</div>
+    </div>
+    <button class="btn" onclick="location.href='./settings.html'">Settings</button>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner"><img id="hdrBanner" src="./assets/banner.png" alt="Clinic Banner"></div>
+
+  <!-- Role Tiles -->
+  <div class="grid">
+    <div class="tile doctor" data-role="doctor" data-dest="dashboard.html" data-key="pin_dashboard">
+      <div class="badge">Doctor</div>
+      <h3>Dashboard</h3>
+      <p>Consultations, OPD live, quick actions.</p>
+    </div>
+
+    <div class="tile supervisor" data-role="supervisor" data-dest="supervisor-hub.html" data-key="pin_supervisor">
+      <div class="badge">Supervisor</div>
+      <h3>Supervisor Hub</h3>
+      <p>Oversight, pharmacy, lab & inventory.</p>
+    </div>
+
+    <div class="tile front" data-role="frontoffice" data-dest="frontoffice.html" data-key="pin_frontoffice">
+      <div class="badge">Front Office</div>
+      <h3>Front Office</h3>
+      <p>Bookings, patient intake, billing.</p>
+    </div>
+
+    <a class="tile settings" href="./settings.html">
+      <div class="badge">Admin</div>
+      <h3>Settings</h3>
+      <p>Branding, backups, diagnostics, PINs.</p>
+    </a>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<!-- PIN Modal -->
+<div id="pinBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal">
+    <h4 id="pinTitle">Enter PIN</h4>
+    <div class="row">
+      <input id="pinInput" class="input" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="4–8 digit PIN"/>
+      <button class="btn" id="pinSubmit">Unlock</button>
+      <button class="btn" id="pinCancel">Cancel</button>
+    </div>
+    <div id="pinError" class="error" style="display:none">Invalid PIN. Try again.</div>
+    <div class="muted" style="margin-top:6px">Default PINs (first time only): Doctor 1111 · Supervisor 2222 · Front Office 3333</div>
+  </div>
+</div>
+
+<script>
+/* ---------- Branding (DB.settings('branding') -> LS fallback) ---------- */
+async function loadBranding(){
+  let b=null;
+  try{
+    await window.DB?.open?.();
+    b = await window.DB?.settings?.get?.('branding');
+    b = b?.val || b?.value || null;
+  }catch(e){ /* ignore */ }
+  if(!b){
+    try{ b = JSON.parse(localStorage.getItem('branding_json')||'null') || null; }catch{}
+  }
+  b = b || { clinicName:'Clinic', clinicTag:'Welcome', pharmacyName:'Pharmacy', logoUrl:'', bannerUrl:'' };
+
+  const logo = b.logoUrl || './assets/logo.png';
+  const banner = b.bannerUrl || './assets/banner.png';
+  document.getElementById('hdrLogo').src = logo;
+  document.getElementById('hdrBanner').src = banner;
+  document.getElementById('clinicName').textContent = b.clinicName || 'Clinic';
+  document.getElementById('clinicTag').textContent  = b.clinicTag  || 'Welcome';
+}
+
+/* ---------- PIN bootstrap (defaults if missing) ---------- */
+(function ensureDefaultPins(){
+  if(!localStorage.getItem('pin_dashboard'))   localStorage.setItem('pin_dashboard','1111');
+  if(!localStorage.getItem('pin_supervisor'))  localStorage.setItem('pin_supervisor','2222');
+  if(!localStorage.getItem('pin_frontoffice')) localStorage.setItem('pin_frontoffice','3333');
+})();
+
+/* ---------- Modal logic ---------- */
+const modal = {
+  wrap: document.getElementById('pinBackdrop'),
+  title: document.getElementById('pinTitle'),
+  input: document.getElementById('pinInput'),
+  err:   document.getElementById('pinError'),
+  submit:document.getElementById('pinSubmit'),
+  cancel:document.getElementById('pinCancel'),
+  ctx:   { key:null, dest:null, role:null }
+};
+function openPIN(roleLabel, storageKey, dest){
+  modal.ctx = {key:storageKey, dest, role:roleLabel};
+  modal.title.textContent = `Enter ${roleLabel} PIN`;
+  modal.err.style.display='none';
+  modal.input.value='';
+  modal.wrap.classList.add('show'); modal.wrap.setAttribute('aria-hidden','false');
+  setTimeout(()=>modal.input.focus(), 30);
+}
+function closePIN(){
+  modal.wrap.classList.remove('show'); modal.wrap.setAttribute('aria-hidden','true');
+  modal.ctx = {key:null, dest:null, role:null};
+}
+function verifyPIN(){
+  const want = (localStorage.getItem(modal.ctx.key)||'').trim();
+  const got = (modal.input.value||'').trim();
+  if(/^\d{4,8}$/.test(got) && got===want){
+    location.href = modal.ctx.dest || './';
+  }else{
+    modal.err.style.display='block';
+    modal.input.select();
+  }
+}
+
+/* Tile clicks -> open modal */
+document.querySelectorAll('.tile[data-key]').forEach(tile=>{
+  tile.addEventListener('click', ()=>{
+    const role = tile.dataset.role || 'Role';
+    const key  = tile.dataset.key;
+    const dest = tile.dataset.dest;
+    openPIN(role.charAt(0).toUpperCase()+role.slice(1), key, dest);
+  });
+});
+
+/* Modal controls */
+modal.submit.addEventListener('click', verifyPIN);
+modal.cancel.addEventListener('click', closePIN);
+modal.input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') verifyPIN(); });
+document.getElementById('pinBackdrop').addEventListener('click', (e)=>{ if(e.target===e.currentTarget) closePIN(); });
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closePIN(); });
+
+/* Boot */
+loadBranding();
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("./service-worker.js"); }
+</script>
+
+<!-- Optional engines (safe if present, harmless if not) -->
+<script src="/scripts/qrcode.min.js?v=1.1"></script>
+<script src="/scripts/barcode.js?v=8.4.6"></script>
+<script src="/scripts/seed-and-diagnostics.js?v=1.2"></script>
+</body>
+</html>

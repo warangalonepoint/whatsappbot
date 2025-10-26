@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Not authorized · Clinic PWA</title>
+<link rel="stylesheet" href="./styles.css"/>
+<script defer src="./scripts/brand-sync.js?v=1"></script>
+<style>:root{--ink:#0f172a;--muted:#475569;--r:16px}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f6f7fb;color:var(--ink);font:14px/1.45 system-ui}.card{width:min(520px,92%);background:#fff;border:1px solid #e5e7eb;border-radius:var(--r);padding:18px;box-shadow:0 6px 18px rgba(0,0,0,.06)}h1{margin:0 0 6px;font-size:18px}.muted{color:var(--muted);font-size:13px;margin-bottom:10px}.row{display:flex;gap:8px;flex-wrap:wrap}.btn{padding:10px 12px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;font-weight:800;cursor:pointer;text-decoration:none;color:inherit}.btn.primary{background:#17B26A;color:#fff;border:none}</style>
+<script defer src="./scripts/auth.js?v=fs1"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>Not authorized for this page</h1>
+    <div class="muted" id="msg">You’re signed in, but this section needs a different role.</div>
+    <div class="row">
+      <a class="btn" href="./index.html">Home</a>
+      <a class="btn" href="./login.html">Switch role</a>
+      <a class="btn" href="./tv.html">TV</a>
+      <a id="gotoAdmin" class="btn primary" href="./admin.html" style="display:none">Go to Admin</a>
+    </div>
+  </div>
+<script>(function(){const role=(window.AUTH?.getRole?.()||'').toLowerCase();const msg=document.getElementById('msg');if(role)msg.textContent=`Signed in as "${role}". This section needs a different role.`;if(role==='admin')document.getElementById('gotoAdmin').style.display='inline-block';})();</script>
+</body>
+</html>

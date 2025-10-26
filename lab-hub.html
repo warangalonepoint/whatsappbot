@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Lab Hub · Clinic PWA</title>
+
+  <!-- PWA + base styles -->
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <!-- Optional: prefetch logo/banner for snappier paint -->
+  <link rel="preload" as="image" href="./assets/logo.png">
+  <link rel="preload" as="image" href="./assets/banner.png">
+
+  <!-- Config/DB (kept at top so future wiring can hook in easily) -->
+  <script src="./config/config.js"></script>
+  <script src="./scripts/db.js"></script>
+
+  <style>
+    :root{
+      --bg:linear-gradient(145deg,#f9fafb,#f7f5ff,#fff9f3);
+      --card:#fff; --ink:#0f172a; --muted:#475569; --primary:#17B26A;
+      --r:16px; --shadow:0 6px 18px rgba(15,23,42,.06);
+      --mint:#DFFAF0; --lav:#F6F2FF; --peach:#FFF7EF;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+
+    .header{display:flex;align-items:center;justify-content:space-between;
+      padding:10px 12px;background:#DED8F2b3;border-radius:12px;box-shadow:var(--shadow);margin-top:10px}
+    .header .logo{height:40px}
+    .title{font-weight:800;font-size:18px}
+    .sub{font-size:12px;color:var(--muted)}
+    .back{background:#fff;border:1px solid #cbd5e1;border-radius:12px;padding:6px 10px;font-weight:700}
+
+    .banner{position:relative;overflow:hidden;border-radius:16px;margin:12px 0;background:#D6E5DD}
+    .banner img{width:100%;transform:scale(.65);transform-origin:center;opacity:.95;mix-blend-mode:multiply;display:block}
+
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+    .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    @media (max-width:900px){ .grid3{grid-template-columns:repeat(2,minmax(0,1fr));} }
+    @media (max-width:620px){ .grid3{grid-template-columns:1fr;} }
+
+    .tile{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:var(--shadow);padding:16px;
+      display:flex;flex-direction:column;gap:10px}
+    .tile h3{margin:0 0 4px;display:flex;align-items:center;gap:8px}
+    .tile .desc{color:var(--muted);font-size:13px}
+    .tile .row{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:8px 14px;font-weight:700;cursor:pointer;text-align:center}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .footer{text-align:center;padding:14px 4px;font-size:13px;color:#64748b;margin:18px 0}
+
+    /* key-hint pill */
+    .kbd{display:inline-block;border:1px solid #e2e8f0;border-radius:6px;padding:2px 6px;font-size:12px;background:#f8fafc}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <header class="header" role="banner">
+    <div style="display:flex;align-items:center;gap:10px">
+      <a class="back" href="./dashboard.html" aria-label="Back to Dashboard">←</a>
+      <img class="logo" src="./assets/logo.png" alt="Clinic logo" width="120" height="40">
+      <div>
+        <div class="title">Lab Hub</div>
+        <div class="sub">Diagnostics · Tests · Records</div>
+      </div>
+    </div>
+    <nav aria-label="Quick links">
+      <a class="btn" href="./index.html">Home</a>
+    </nav>
+  </header>
+
+  <!-- Banner -->
+  <div class="banner" aria-hidden="true"><img src="./assets/banner.png" alt=""></div>
+
+  <!-- Tiles -->
+  <section class="card" style="background:var(--mint)">
+    <h3 style="margin:0 0 8px">Lab Operations</h3>
+    <div class="grid3">
+
+      <article class="tile" style="background:var(--lav)">
+        <h3>🧪 Lab Console</h3>
+        <div class="desc">Run daily diagnostics, enter samples, and print quick reports.</div>
+        <div class="row">
+          <a class="btn primary" href="./lab.html" aria-label="Open Lab Console">Open Lab Console</a>
+          <span class="kbd" title="Keyboard: L">L</span>
+        </div>
+      </article>
+
+      <article class="tile" style="background:var(--peach)">
+        <h3>📚 Lab Tests</h3>
+        <div class="desc">Manage test catalogue, pricing, profiles and TATs.</div>
+        <div class="row">
+          <a class="btn primary" href="./lab-tests.html" aria-label="Manage Lab Tests">Manage Tests</a>
+          <span class="kbd" title="Keyboard: T">T</span>
+        </div>
+      </article>
+
+      <article class="tile" style="background:var(--lav)">
+        <h3>📄 Lab Records</h3>
+        <div class="desc">Access completed reports and patient test history.</div>
+        <div class="row">
+          <a class="btn primary" href="./lab-records.html" aria-label="View Lab Records">View Records</a>
+          <span class="kbd" title="Keyboard: R">R</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <footer class="footer">© 2025 <strong>Powered by Onestop AI Services</strong></footer>
+</div>
+
+<script>
+  // Light keyboard shortcuts for power users
+  document.addEventListener('keydown', (e)=>{
+    if (e.target && ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k==='l') location.href = './lab.html';
+    if (k==='t') location.href = './lab-tests.html';
+    if (k==='r') location.href = './lab-records.html';
+    if (k==='h') location.href = './index.html';
+  });
+
+  // Register service worker if available (PWA polish)
+  if ('serviceWorker' in navigator) {
+    try { navigator.serviceWorker.register('./service-worker.js'); } catch {}
+  }
+</script>
+</body>
+</html>

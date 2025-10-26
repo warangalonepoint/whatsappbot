@@ -1,0 +1,1 @@
+(function(){window.RoleGuard={any:()=>AUTH.requireRole(),admin:()=>AUTH.requireRole(['admin']),doctor:()=>AUTH.requireRole(['doctor']),supervisor:()=>AUTH.requireRole(['supervisor']),frontoffice:()=>AUTH.requireRole(['front-office']),doctorOrSupervisor:()=>AUTH.requireRole(['doctor','supervisor'])};})();

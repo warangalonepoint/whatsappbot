@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script src="./config/config.js"></script>
+  <script src="./scripts/db.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Supplier Payments · Pharmacy · Clinic PWA</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <script defer src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <style>
+    :root{
+      --bg-gradient:linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+      --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --teal:#C8F5E4; --gray:#f4f4f5;
+      --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+      --r:16px; --shadow:0 6px 18px rgba(0,0,0,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui;background:var(--bg-gradient);color:var(--ink)}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1180px;margin:0 auto;padding:0 10px}
+
+    .header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+      background:#D6E5DD;border:1px solid #0001;border-radius:12px;margin-top:10px;box-shadow:var(--shadow)}
+    .header .logo{height:40px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .btn:hover{background:#f1f5f9}
+    .input,select,textarea{border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;width:100%}
+    .small{font-size:12px;color:#64748b}
+    .badge{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+
+    .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:#DED8F2}
+    .banner img{width:100%;transform:scale(.7);transform-origin:center;mix-blend-mode:multiply;opacity:.95;display:block}
+
+    /* KPI strip */
+    .kpis{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:10px}
+    .kpi{border-radius:16px;padding:12px;box-shadow:var(--shadow);border:1px solid #0000000d}
+    .kpi h4{margin:0;font-size:12px;color:#475569}
+    .kpi b{display:block;margin-top:6px;font-size:20px}
+    .kpi.mint{background:var(--mint)}
+    .kpi.lav{background:var(--lav)}
+    .kpi.peach{background:var(--peach)}
+    .kpi.teal{background:var(--teal)}
+
+    /* Layout grid */
+    .grid{display:grid;gap:12px;grid-template-columns:1.2fr .8fr}
+    @media (max-width:1100px){ .grid{grid-template-columns:1fr} }
+
+    /* Tables */
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+    th{background:#f8fafc}
+    .right{display:flex;justify-content:space-between;align-items:center}
+    .status{border-radius:999px;padding:2px 8px;border:1px solid #e5e7eb;background:#fff;font-size:12px}
+    .danger{outline:2px solid #ef4444}
+    .warn{outline:2px solid #fbbf24}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Header -->
+  <div class="header">
+    <div class="row" style="align-items:center">
+      <img id="hdrLogo" class="logo" src="./assets/logo.png" alt="logo">
+      <div>
+        <div style="font-weight:900;font-size:18px">Pharmacy · Supplier Payments</div>
+        <div class="small">Record payments · View balances · Export</div>
+      </div>
+    </div>
+    <div class="row">
+      <a class="btn" href="./pharmacy.html">Pharmacy</a>
+      <a class="btn" href="./purchases.html">Purchases</a>
+      <a class="btn" href="./returns.html">Returns</a>
+    </div>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner"><img id="hdrBanner" src="./assets/banner.png" alt="Clinic Banner"></div>
+
+  <!-- KPIs -->
+  <section class="kpis">
+    <div class="kpi mint"><h4>Total Due</h4><b id="k_due">—</b><span class="small">Across all suppliers</span></div>
+    <div class="kpi lav"><h4>Suppliers</h4><b id="k_sup">—</b><span class="small">Active in books</span></div>
+    <div class="kpi peach"><h4>Payments (This Month)</h4><b id="k_pay">—</b><span class="small">Recorded outflow</span></div>
+    <div class="kpi teal"><h4>Purchases (This Month)</h4><b id="k_purch">—</b><span class="small">Invoice totals</span></div>
+  </section>
+
+  <div class="grid">
+    <!-- Left: Balances -->
+    <section class="card">
+      <div class="right">
+        <b>Balances by Supplier</b>
+        <div class="row">
+          <input id="q" class="input" placeholder="Search supplier">
+          <button class="btn" id="btnRun">Run</button>
+          <button class="btn" id="btnCSV">Export CSV</button>
+          <span class="badge" id="stat">—</span>
+        </div>
+      </div>
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th>Opening</th>
+            <th>Purchases</th>
+            <th>Payments</th>
+            <th>Purchase Returns</th>
+            <th>Due</th>
+            <th>Ledger</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Right: Add Payment -->
+    <section class="card">
+      <div class="right"><b>Record Payment</b><span class="status" id="selDue">—</span></div>
+      <div class="row" style="margin-top:8px">
+        <input id="pSupplier" class="input" placeholder="Supplier name *">
+        <input id="pDate" class="input" type="date">
+        <select id="pMode" class="input">
+          <option>Cash</option><option>UPI</option><option>Bank</option><option>Card</option><option>Other</option>
+        </select>
+        <input id="pRef" class="input" placeholder="Ref # / txn id">
+        <input id="pAmt" class="input" type="number" step="0.01" placeholder="Amount *">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="pNotes" class="input" placeholder="Notes (optional)">
+        <button class="btn primary" id="btnSave">Save Payment</button>
+      </div>
+      <div class="small" style="margin-top:6px">Balances update immediately. Returns reduce due.</div>
+    </section>
+  </div>
+
+  <!-- Supplier Ledger -->
+  <section class="card">
+    <div class="right">
+      <b>Supplier Ledger</b>
+      <div class="row" style="align-items:end">
+        <input id="lSupplier" class="input" placeholder="Supplier (auto-fill via ‘Ledger’ button)">
+        <div>
+          <label class="small">From</label>
+          <input id="lFrom" type="date" class="input">
+        </div>
+        <div>
+          <label class="small">To</label>
+          <input id="lTo" type="date" class="input">
+        </div>
+        <button class="btn" id="btnLedgerRun">Run</button>
+        <button class="btn" id="btnLedgerCSV">Export CSV</button>
+        <span class="badge" id="lStat">—</span>
+      </div>
+    </div>
+    <table id="tblLedger">
+      <thead>
+        <tr>
+          <th>Date</th><th>Type</th><th>Ref / Inv #</th><th>Mode</th><th>Notes</th><th>Debit (Purch)</th><th>Credit (Pay/Return)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr><th colspan="5" style="text-align:right">Net Due</th><th colspan="2" id="lDue" style="text-align:left">—</th></tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <div class="footer" style="text-align:center;padding:16px 4px;font-size:13px;color:#475569;margin:22px 0 14px">
+    © 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved
+  </div>
+</div>
+
+<script>
+/* ---------- Dexie bootstrap / fallback ---------- */
+let DB = window.DB;
+if(!DB){
+  const db = new Dexie('clinicdb');
+  db.version(1).stores({
+    purchases:'++id, supplier, supplierId, invNo, date, items, subtotal, total',
+    supplier_payments:'++id, supplier, supplierId, date, mode, refNo, amount, notes',
+    supplier_opening_balances:'++id, supplier, openingAmount, asOfDate',
+    returns:'++id, date, source, supplier, supp, refId, items',
+    batches:'++id, sku, batchNo, rate, mrp',
+    products:'++id, sku, name, form, brandName, companyName'
+  });
+  DB = db;
+}
+
+/* ---------- Branding (optional) ---------- */
+(async function loadBranding(){
+  try{
+    await DB.open?.();
+    const rec = await DB.settings?.get?.('branding');
+    const b = rec?.val || rec?.value || JSON.parse(localStorage.getItem('branding_json')||'null') || {};
+    const logo = b.logoUrl || './assets/logo.png';
+    const banner = b.bannerUrl || './assets/banner.png';
+    const L=document.getElementById('hdrLogo'); if(L) L.src=logo;
+    const B=document.getElementById('hdrBanner'); if(B) B.src=banner;
+  }catch(e){}
+})();
+
+/* ---------- Helpers ---------- */
+const $ = s => document.querySelector(s);
+const INR = n => '₹' + Number(n||0).toFixed(2);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+$('#pDate').value = todayISO();
+$('#lFrom').value = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+$('#lTo').value   = todayISO();
+
+/* ---------- Aggregations ---------- */
+async function computeReturnsValuePerSupplier(){
+  const [rets,batches] = await Promise.all([
+    DB.table('returns').where('source').equals('purchase').toArray().catch(()=>[]),
+    DB.table('batches').toArray().catch(()=>[])
+  ]);
+  const rateByKey={}; batches.forEach(b=> rateByKey[`${b.sku}|${(b.batchNo||'').toUpperCase()}`]=+b.rate||0);
+  const bySup={};
+  rets.forEach(r=>{
+    const sup = r.supplier || r.supp || '';
+    const amt = (r.items||[]).reduce((a,it)=> a + (+it.qty||0)*(rateByKey[`${it.sku}|${(it.batchNo||'').toUpperCase()}`]||0),0);
+    bySup[sup]=(bySup[sup]||0)+amt;
+  });
+  return bySup;
+}
+async function aggregateBalances(qFilter=''){
+  const [opens,purs,pays,retVal] = await Promise.all([
+    DB.table('supplier_opening_balances').toArray().catch(()=>[]),
+    DB.table('purchases').toArray().catch(()=>[]),
+    DB.table('supplier_payments').toArray().catch(()=>[]),
+    computeReturnsValuePerSupplier()
+  ]);
+  const supSet=new Set();
+  opens.forEach(o=>supSet.add(o.supplier||'')); 
+  purs.forEach(p=>supSet.add(p.supplier||p.supplierId||'')); 
+  pays.forEach(p=>supSet.add(p.supplier||p.supplierId||''));
+
+  const rows=[];
+  for(const sup of supSet){
+    const sname = String(sup||'').trim();
+    if(qFilter && !sname.toLowerCase().includes(qFilter)) continue;
+
+    const opening   = opens.filter(o=> (o.supplier||'')===sname).reduce((a,b)=>a+(+b.openingAmount||0),0);
+    const purchases = purs.filter(p=> (p.supplier||p.supplierId||'')===sname).reduce((a,b)=>a+(+b.subtotal||+b.total||0),0);
+    const payments  = pays.filter(p=> (p.supplier||p.supplierId||'')===sname).reduce((a,b)=>a+(+b.amount||0),0);
+    const pReturns  = +retVal[sname]||0;
+    const due = Math.max(0, opening + purchases - payments - pReturns);
+    rows.push({supplier:sname||'(unknown)', opening, purchases, payments, pReturns, due});
+  }
+  rows.sort((a,b)=> (b.due - a.due));
+  return rows;
+}
+
+/* ---------- KPIs ---------- */
+function firstOfMonth(d){ d=new Date(d); d.setDate(1); return d.toISOString().slice(0,10); }
+async function refreshMonthKPIs(){
+  const today = todayISO();
+  const from  = firstOfMonth(today);
+  const [pays,purs] = await Promise.all([
+    DB.table('supplier_payments').toArray().catch(()=>[]),
+    DB.table('purchases').toArray().catch(()=>[])
+  ]);
+  const paySum = pays.filter(p=> (p.date||'')>=from && (p.date||'')<=today).reduce((a,b)=>a+(+b.amount||0),0);
+  const purchSum = purs.filter(p=> (p.date||'')>=from && (p.date||'')<=today).reduce((a,b)=>a+(+b.total||+b.subtotal||0),0);
+  $('#k_pay').textContent = INR(paySum);
+  $('#k_purch').textContent = INR(purchSum);
+}
+
+/* ---------- Renderers ---------- */
+function escHTML(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderBalances(rows){
+  const tb=$('#tbl tbody'); tb.innerHTML='';
+  let totalDue=0;
+  rows.forEach(r=>{
+    totalDue += (+r.due||0);
+    const tr=document.createElement('tr');
+    if(r.due>0) tr.className = (r.due>50000?'danger':(r.due>10000?'warn':'')); // cues
+    tr.innerHTML = `
+      <td>${escHTML(r.supplier)}</td>
+      <td>${INR(r.opening)}</td>
+      <td>${INR(r.purchases)}</td>
+      <td>${INR(r.payments)}</td>
+      <td>${INR(r.pReturns)}</td>
+      <td><b>${INR(r.due)}</b></td>
+      <td><button class="btn" onclick="openLedger('${escHTML(r.supplier).replace(/'/g,'&#39;')}')">Ledger</button>
+          <button class="btn" onclick="prefill('${escHTML(r.supplier).replace(/'/g,'&#39;')}')">Pay</button></td>
+    `;
+    tb.appendChild(tr);
+  });
+  $('#stat').textContent = `Suppliers: ${rows.length} · Total Due: ${INR(totalDue)}`;
+  $('#k_due').textContent = INR(totalDue);
+  $('#k_sup').textContent = rows.length;
+}
+
+/* ---------- Payment form ---------- */
+function prefill(name){ 
+  $('#pSupplier').value=name; 
+  updateInlineDueDisplay(name);
+  window.scrollTo({top:0,behavior:'smooth'}); 
+}
+async function updateInlineDueDisplay(name){
+  const rows = await aggregateBalances('');
+  const rec = rows.find(r=> (r.supplier||'')===name);
+  $('#selDue').textContent = rec ? `Due: ${INR(rec.due)}` : '—';
+}
+async function savePayment(){
+  const supplier=$('#pSupplier').value.trim();
+  const date=$('#pDate').value||todayISO();
+  const mode=$('#pMode').value;
+  const refNo=$('#pRef').value.trim();
+  const amount=+($('#pAmt').value||0);
+  const notes=$('#pNotes').value.trim();
+  if(!supplier||amount<=0){ alert('Supplier and positive amount required'); return; }
+  await DB.table('supplier_payments').add({supplier,date,mode,refNo,amount,notes});
+  // reset amount/ref/notes
+  $('#pAmt').value=''; $('#pRef').value=''; $('#pNotes').value='';
+  await run();
+  updateInlineDueDisplay(supplier);
+}
+$('#btnSave').onclick=savePayment;
+
+/* ---------- Ledger ---------- */
+async function buildLedgerRows(supplier, from, to){
+  const [purs,pays,rets] = await Promise.all([
+    DB.table('purchases').toArray().catch(()=>[]),
+    DB.table('supplier_payments').toArray().catch(()=>[]),
+    DB.table('returns').where('source').equals('purchase').toArray().catch(()=>[])
+  ]);
+  const inRange = d=> (!from || d>=from) && (!to || d<=to);
+  const rows=[];
+  purs.filter(p=> (p.supplier||p.supplierId||'')===supplier && inRange(p.date||'')).forEach(p=>{
+    rows.push({date:p.date||'', type:'Purchase', ref:p.invNo||'', mode:'', notes:'', debit:(+p.total||+p.subtotal||0), credit:0});
+  });
+  pays.filter(p=> (p.supplier||p.supplierId||'')===supplier && inRange(p.date||'')).forEach(p=>{
+    rows.push({date:p.date||'', type:'Payment', ref:p.refNo||'', mode:p.mode||'', notes:p.notes||'', debit:0, credit:(+p.amount||0)});
+  });
+  // returns valued using batch rate not needed here—use purchase return as credit with 0 ref
+  // (If you prefer exact valuation per batch, it’s included in balances; for ledger we’ll show presence)
+  rets.filter(r=> (r.supplier||r.supp||'')===supplier && inRange(r.date||'')).forEach(r=>{
+    rows.push({date:r.date||'', type:'Purchase Return', ref:r.refId||'', mode:'', notes:'', debit:0, credit:0}); // keep as marker; due already reduced in KPI/balances
+  });
+  rows.sort((a,b)=> (a.date||'').localeCompare(b.date||'') || a.type.localeCompare(b.type));
+  return rows;
+}
+async function renderLedger(){
+  const sup = ($('#lSupplier').value||'').trim();
+  const from=$('#lFrom').value||'';
+  const to  =$('#lTo').value||'';
+  if(!sup){ $('#lStat').textContent='—'; $('#tblLedger tbody').innerHTML=''; $('#lDue').textContent='—'; return; }
+  const rows = await buildLedgerRows(sup, from, to);
+  const tb=$('#tblLedger tbody'); tb.innerHTML='';
+  let debit=0, credit=0;
+  rows.forEach(r=>{
+    debit += +r.debit||0; credit += +r.credit||0;
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${r.date||''}</td><td>${r.type}</td><td>${r.ref||''}</td><td>${r.mode||''}</td><td>${r.notes||''}</td>
+                    <td>${r.debit?INR(r.debit):''}</td><td>${r.credit?INR(r.credit):''}</td>`;
+    tb.appendChild(tr);
+  });
+  $('#lStat').textContent = `Rows: ${rows.length} · Debit: ${INR(debit)} · Credit: ${INR(credit)}`;
+  $('#lDue').textContent = INR(Math.max(0, debit - credit)); // note: returns are accounted in balances; here only purchases/payments math
+}
+function openLedger(name){
+  $('#lSupplier').value = name;
+  renderLedger();
+}
+$('#btnLedgerRun').onclick = renderLedger;
+
+/* ---------- CSV ---------- */
+function exportBalancesCSV(){
+  const headers=[...document.querySelectorAll('#tbl thead th')].map(th=>th.textContent);
+  const rows=[...document.querySelectorAll('#tbl tbody tr')].map(tr=>[...tr.children].slice(0,6).map(td=>td.textContent));
+  const esc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const lines=[headers.slice(0,6).map(esc).join(',')].concat(rows.map(r=>r.map(esc).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='supplier-balances.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+$('#btnCSV').onclick=exportBalancesCSV;
+
+async function exportLedgerCSV(){
+  const sup = ($('#lSupplier').value||'').trim();
+  const from=$('#lFrom').value||''; const to=$('#lTo').value||'';
+  const rows = await buildLedgerRows(sup, from, to);
+  const headers=['Date','Type','Ref','Mode','Notes','Debit','Credit'];
+  const esc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const lines=[headers.map(esc).join(',')].concat(rows.map(r=>[r.date,r.type,r.ref,r.mode,r.notes, r.debit, r.credit].map(esc).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`ledger_${sup||'all'}.csv`; a.click(); URL.revokeObjectURL(a.href);
+}
+$('#btnLedgerCSV').onclick=exportLedgerCSV;
+
+/* ---------- Runner ---------- */
+async function run(){
+  const q=($('#q').value||'').trim().toLowerCase();
+  const rows = await aggregateBalances(q);
+  renderBalances(rows);
+  await refreshMonthKPIs();
+}
+$('#btnRun').onclick=run;
+
+/* ---------- Boot ---------- */
+document.addEventListener('DOMContentLoaded', run);
+</script>
+</body>
+</html>

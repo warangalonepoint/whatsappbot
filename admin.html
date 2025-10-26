@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin Console · Clinic PWA</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <meta name="robots" content="noindex,nofollow"/>
+
+  <!-- Dexie (for counts + settings) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+
+  <style>
+    :root{
+      /* Default theme: overridden by saved branding on load */
+      --bg-gradient:linear-gradient(145deg,#edf3f0,#ece9f6,#fff0e6);
+      --card:#fff; --ink:#0f172a; --muted:#475569; --primary:#17B26A;
+      --r:16px; --shadow:0 10px 26px rgba(15,23,42,.08);
+      --mint:#C8E3D2; --lav:#D7CEF0; --peach:#FFD8B8;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui;background:var(--bg-gradient);color:var(--ink);min-height:100vh}
+    .wrap{max-width:1200px;margin:0 auto;padding:0 10px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+    .header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:10px 12px;background:var(--mint);border:1px solid #0001;border-radius:12px;margin:12px 0 10px;box-shadow:var(--shadow)
+    }
+    .header .logo{height:40px}
+    .header .title{font-weight:800;font-size:18px}
+    .header .sub{font-size:12px;color:var(--muted)}
+
+    /* Banner with size + fit modes (applied from saved branding) */
+    .banner{position:relative;overflow:hidden;border-radius:16px;margin:12px 0;background:var(--lav);display:flex;align-items:center;justify-content:center}
+    .banner.compact{height:100px}
+    .banner.medium{height:160px}
+    .banner.tall{height:220px}
+    .banner img{display:block;border-radius:16px;opacity:.95;mix-blend-mode:multiply}
+    .banner.fit-contain img{height:100%; width:auto; object-fit:contain}
+    .banner.fit-cover img{height:100%; width:100%; object-fit:cover}
+
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:8px 14px;font-weight:700;cursor:pointer;text-decoration:none;color:inherit}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+    .tiles{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}
+    .tile{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:var(--shadow);padding:16px;display:flex;flex-direction:column}
+    .tile h3{margin:0 0 6px}
+    .tile p{margin:0 0 10px;color:var(--muted);font-size:13px}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}
+    .kpi h4{margin:0 0 6px;font-size:12px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+    .kpi .v{font-weight:900;font-size:22px}
+    .kpi .sub{font-size:12px;color:#64748b;margin-top:2px}
+
+    .badge{display:inline-block;border:1px solid #e5e7eb;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:#fff}
+    .muted{color:#64748b}
+    .footer{text-align:center;padding:16px 4px;font-size:13px;color:#64748b;margin:22px 0}
+
+    .toggles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .toggle{border:1px solid #e5e7eb;border-radius:12px;padding:10px;background:#fff;display:flex;align-items:center;justify-content:space-between}
+    .toggle label{font-weight:700}
+    .toggle small{color:#64748b}
+
+    @media (max-width:1040px){ .tiles{grid-template-columns:1fr 1fr} .kpis{grid-template-columns:repeat(2,1fr)} .toggles{grid-template-columns:1fr 1fr} }
+    @media (max-width:640px){ .tiles{grid-template-columns:1fr} .toggles{grid-template-columns:1fr} .banner.medium{height:140px} .banner.tall{height:200px} }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="row">
+      <img id="logo" class="logo" src="./assets/logo.png" alt="logo">
+      <div>
+        <div class="title" id="hdrTitle">Admin Console</div>
+        <div class="sub" id="hdrSub">Navigation · Diagnostics · Seed · Wipe · Settings</div>
+      </div>
+    </div>
+    <div class="row">
+      <a class="btn" href="./index.html">Home</a>
+      <a class="btn primary" href="./settings.html">Open Settings</a>
+    </div>
+  </div>
+
+  <!-- Banner (auto-fit + size from branding) -->
+  <div id="banner" class="banner medium fit-contain">
+    <img id="bannerImg" src="./assets/banner.png" alt="Admin Banner">
+  </div>
+
+  <!-- KPIs -->
+  <div class="card" style="background:var(--mint)">
+    <div class="kpis">
+      <div class="kpi">
+        <h4>Bookings (Today)</h4>
+        <div class="v" id="k_today">—</div>
+        <div class="sub">from Dexie: bookings</div>
+      </div>
+      <div class="kpi">
+        <h4>Patients</h4>
+        <div class="v" id="k_pat">—</div>
+        <div class="sub">total registered</div>
+      </div>
+      <div class="kpi">
+        <h4>Pharmacy Sales (Today)</h4>
+        <div class="v" id="k_sales">₹0.00</div>
+        <div class="sub">from localStorage</div>
+      </div>
+      <div class="kpi">
+        <h4>Lab Queue</h4>
+        <div class="v" id="k_labq">—</div>
+        <div class="sub">pending OPD → Lab orders</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Navigation -->
+  <div class="card" style="background:var(--lav)">
+    <h3 style="margin:0 0 8px">Quick Navigation</h3>
+    <div class="tiles">
+      <div class="tile">
+        <h3>Front Office</h3>
+        <p>Bookings, patient registry, tokens & live OPD.</p>
+        <div class="row">
+          <a class="btn" href="./bookings.html">Bookings</a>
+          <a class="btn" href="./opd-live.html">OPD Live</a>
+          <a class="btn" href="./tv.html">TV</a>
+        </div>
+      </div>
+
+      <div class="tile">
+        <h3>Pharmacy Hub</h3>
+        <p>Central hub for POS, Purchases, Inventory, Returns, Analytics.</p>
+        <div class="row">
+          <a class="btn primary" href="./pharmacy.html">Open Hub</a>
+          <a class="btn" href="./sales.html">POS</a>
+          <a class="btn" href="./purchases.html">Purchases</a>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <a class="btn" href="./inventory.html">Inventory</a>
+          <a class="btn" href="./returns.html">Returns</a>
+          <a class="btn" href="./analytics.html">Analytics</a>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <a class="btn" href="./gst.html">GST Reports</a>
+          <a class="btn" href="./suppliers.html">Supplier Accounts</a>
+        </div>
+      </div>
+
+      <div class="tile">
+        <h3>Lab Hub</h3>
+        <p>Diagnostics operations, catalogue, data entry & records.</p>
+        <div class="row">
+          <a class="btn primary" href="./lab-hub.html">Open Hub</a>
+          <a class="btn" href="./lab-catalog.html">Catalog</a>
+          <a class="btn" href="./lab-tests.html">Tests Entry</a>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <a class="btn" href="./lab-records.html">Records</a>
+        </div>
+      </div>
+
+      <div class="tile">
+        <h3>Clinic Reports</h3>
+        <p>Daily income snapshot combining OPD, Lab and Pharmacy.</p>
+        <div class="row"><a class="btn" href="./reports.html">Open Reports</a></div>
+      </div>
+
+      <div class="tile">
+        <h3>Settings</h3>
+        <p>Backup/restore JSON, PINs, diagnostics, seed and wipe.</p>
+        <div class="row"><a class="btn primary" href="./settings.html">Open Settings</a></div>
+      </div>
+
+      <div class="tile">
+        <h3>Print Templates</h3>
+        <p>All print pages live under <code>/print/</code>. Ensure folder exists.</p>
+        <div class="row"><span class="badge" id="printHint">Folder status: —</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature Toggles (non-invasive; persisted for other pages to read) -->
+  <div class="card" style="background:var(--peach)">
+    <h3 style="margin:0 0 8px">Feature Toggles</h3>
+    <div class="muted" style="margin-bottom:6px">Enable/disable sections UI-wide. Pages can read these flags; no logic changed here.</div>
+    <div class="toggles" id="togglesWrap">
+      <!-- built dynamically -->
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn primary" id="btnSaveFlags">Save Toggles</button>
+      <span class="badge" id="flagsStatus">—</span>
+    </div>
+  </div>
+
+  <!-- Admin Actions -->
+  <div class="card" style="background:var(--mint)">
+    <h3 style="margin:0 0 8px">Admin Actions</h3>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn" id="btnDiag">Toggle Diagnostics</button>
+      <button class="btn" id="btnSeed">Re-seed Demo Data</button>
+      <button class="btn" id="btnClearSeed">Clear Seed Flag</button>
+      <button class="btn" id="btnWipe">Wipe All Local Data</button>
+    </div>
+    <div class="row">
+      <a class="btn" href="./settings.html">Backup / Restore (open Settings)</a>
+      <a class="btn" href="./settings.html">PIN Management (open Settings)</a>
+    </div>
+    <div style="margin-top:8px"><span class="badge" id="msg">Ready</span></div>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/* ---------------- Theme presets (same keys as Settings) ---------------- */
+const THEMES = {
+  pastel:{'--bg-gradient':'linear-gradient(145deg,#edf3f0,#ece9f6,#fff0e6)','--mint':'#C8E3D2','--lav':'#D7CEF0','--peach':'#FFD8B8','--card':'#ffffff','--ink':'#0f172a','--muted':'#475569','--primary':'#17B26A'},
+  glass:{'--bg-gradient':'linear-gradient(135deg,#eef2ff,#ecfeff,#fef9c3)','--mint':'#E0F2FE','--lav':'#E9D5FF','--peach':'#FFE4E6','--card':'#ffffff','--ink':'#0f172a','--muted':'#475569','--primary':'#0EA5E9'},
+  neo:{'--bg-gradient':'linear-gradient(145deg,#f1f5f9,#e2e8f0,#f8fafc)','--mint':'#E2F7EC','--lav':'#EDE9FE','--peach':'#FFEAD5','--card':'#ffffff','--ink':'#0f172a','--muted':'#475569','--primary':'#111827'},
+  iphone:{'--bg-gradient':'linear-gradient(180deg,#f7f7f7,#f0f0f0)','--mint':'#E6F4EA','--lav':'#EEE7FF','--peach':'#FFE7D6','--card':'#ffffff','--ink':'#111111','--muted':'#4b5563','--primary':'#0A84FF'}
+};
+function applyTheme(name){
+  const m = THEMES[name]||THEMES.pastel;
+  const root=document.documentElement;
+  Object.entries(m).forEach(([k,v])=> root.style.setProperty(k,v));
+}
+
+/* ---------------- Branding load (Dexie → LS fallback) ---------------- */
+function readLSBranding(){ try{ return JSON.parse(localStorage.getItem('branding_json')||'null')||null; }catch{ return null; } }
+async function loadBranding(){
+  let b=null;
+  try{
+    const db=new Dexie('clinicdb'); await db.open();
+    if(db.tables.map(t=>t.name).includes('settings')){
+      const rec=await db.table('settings').get('branding');
+      b=rec?.val||rec?.value||null;
+    }
+    db.close();
+  }catch{}
+  if(!b) b=readLSBranding();
+  b=b||{clinicName:'',clinicTag:'',theme:'pastel',logoUrl:'',bannerUrl:'',bannerSize:'medium',bannerFit:'contain'};
+
+  // Apply theme + header & banner
+  applyTheme(b.theme||'pastel');
+  document.getElementById('logo').src = b.logoUrl || './assets/logo.png';
+  document.getElementById('bannerImg').src = b.bannerUrl || './assets/banner.png';
+  document.getElementById('hdrTitle').textContent = b.clinicName ? `${b.clinicName} · Admin Console` : 'Admin Console';
+  document.getElementById('hdrSub').textContent = b.clinicTag ? `${b.clinicTag}` : 'Navigation · Diagnostics · Seed · Wipe · Settings';
+
+  const banner=document.getElementById('banner');
+  banner.classList.remove('compact','medium','tall','fit-contain','fit-cover');
+  banner.classList.add((b.bannerSize==='tall')?'tall':(b.bannerSize==='compact')?'compact':'medium');
+  banner.classList.add((b.bannerFit==='cover')?'fit-cover':'fit-contain');
+}
+
+/* ---------------- KPIs (same as your original, untouched) ---------------- */
+const INR = n=>'₹'+Number(n||0).toFixed(2);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+function note(t){ const el=document.getElementById('msg'); el.textContent=t; }
+
+async function refreshCounts(){
+  // Dexie basic
+  try{
+    const db = new Dexie('clinicdb'); await db.open();
+    const names = db.tables.map(t=>t.name);
+    const today=todayISO();
+    let bookings=0, patients=0;
+    if(names.includes('bookings')) bookings = await db.table('bookings').where('date').equals(today).count();
+    if(names.includes('patients')) patients = await db.table('patients').count();
+    document.getElementById('k_today').textContent = bookings;
+    document.getElementById('k_pat').textContent = patients;
+    db.close();
+  }catch{}
+
+  // Pharmacy sales (today)
+  let salesAmt=0;
+  try{
+    const arr = JSON.parse(localStorage.getItem('pharma_sales_json')||'[]')||[];
+    const iso = todayISO();
+    arr.forEach(r=>{
+      if(typeof r.date==='string' && r.date.startsWith(iso)){ salesAmt += Number(r.total||0); }
+      else if(r.ts){ const d=new Date(+r.ts).toISOString().slice(0,10); if(d===iso){ salesAmt += Number(r.total||0); } }
+    });
+  }catch{}
+  document.getElementById('k_sales').textContent = INR(salesAmt);
+
+  // Lab queue (pending)
+  try{
+    const q = JSON.parse(localStorage.getItem('lab_orders_queue')||'[]')||[];
+    document.getElementById('k_labq').textContent = q.length;
+  }catch{ document.getElementById('k_labq').textContent='—'; }
+
+  // Print folder hint
+  document.getElementById('printHint').textContent = 'Folder status: expected at /print (check in project)';
+}
+
+/* ---------------- Feature Toggles ----------------
+   Saved at DB.settings('feature_flags') and LS('feature_flags_json') as fallback
+---------------------------------------------------*/
+const FEATURE_DEFS = [
+  {key:'enable_pharmacy', label:'Pharmacy', desc:'POS, Purchases, Inventory, Returns, Analytics'},
+  {key:'enable_suppliers', label:'Suppliers', desc:'Supplier accounts & dues'},
+  {key:'enable_gst', label:'GST Reports', desc:'Pharmacy GST reports'},
+  {key:'enable_lab', label:'Lab', desc:'Lab hub, catalog, tests, records'},
+  {key:'enable_tv', label:'TV Board', desc:'Patient queue TV view'},
+  {key:'enable_clinic_reports', label:'Clinic Reports', desc:'OPD + Lab + Pharmacy daily'},
+  {key:'enable_branding', label:'Custom Branding', desc:'Apply logo/banner/theme across app'}
+];
+function readLSFlags(){ try{ return JSON.parse(localStorage.getItem('feature_flags_json')||'null')||null; }catch{ return null; } }
+function writeLSFlags(obj){ localStorage.setItem('feature_flags_json', JSON.stringify(obj)); }
+
+async function loadFlags(){
+  let f=null;
+  try{
+    const db = new Dexie('clinicdb'); await db.open();
+    if(db.tables.map(t=>t.name).includes('settings')){
+      const rec = await db.table('settings').get('feature_flags');
+      f = rec?.val || rec?.value || null;
+    }
+    db.close();
+  }catch{}
+  if(!f) f=readLSFlags();
+  // defaults: all on
+  const def={}; FEATURE_DEFS.forEach(x=> def[x.key]=true);
+  f = Object.assign(def, f||{});
+  return f;
+}
+async function saveFlags(f){
+  try{
+    const db = new Dexie('clinicdb'); await db.open();
+    await db.table('settings').put({key:'feature_flags', val:f});
+    db.close();
+  }catch{}
+  writeLSFlags(f);
+}
+async function renderFlags(){
+  const wrap=document.getElementById('togglesWrap');
+  wrap.innerHTML='';
+  const f = await loadFlags();
+  FEATURE_DEFS.forEach(item=>{
+    const id='flag_'+item.key;
+    const div=document.createElement('div');
+    div.className='toggle';
+    div.innerHTML=`
+      <div>
+        <label for="${id}">${item.label}</label><br>
+        <small>${item.desc}</small>
+      </div>
+      <div>
+        <input type="checkbox" id="${id}" ${f[item.key]?'checked':''}>
+      </div>
+    `;
+    wrap.appendChild(div);
+  });
+  document.getElementById('btnSaveFlags').onclick = async ()=>{
+    const out={};
+    FEATURE_DEFS.forEach(item=>{
+      out[item.key] = document.getElementById('flag_'+item.key).checked;
+    });
+    await saveFlags(out);
+    document.getElementById('flagsStatus').textContent='Saved';
+    setTimeout(()=>document.getElementById('flagsStatus').textContent='—',1200);
+  };
+}
+
+/* ---------------- Admin actions (same behavior as before) ---------------- */
+let _diag=false;
+function toggleDiag(){
+  try{
+    if(window.DB && DB.enableDiagnostics){
+      _diag = !_diag;
+      DB.enableDiagnostics(_diag);
+      note('Diagnostics: ' + (_diag?'ON':'OFF'));
+    }else{
+      note('Diagnostics function not available in DB wrapper');
+    }
+  }catch{ note('Diagnostics toggle failed'); }
+}
+function reSeed(){
+  localStorage.removeItem('clinic_seed_v1');
+  note('Seed flag cleared. Reload to insert demo…');
+  setTimeout(()=>location.reload(), 500);
+}
+function clearSeed(){
+  localStorage.removeItem('clinic_seed_v1');
+  note('Seed flag cleared (no reload).');
+}
+async function wipeAll(){
+  if(!confirm('This will erase ALL local data (Dexie + localStorage). Continue?')) return;
+  try{ await Dexie.delete('clinicdb'); }catch{}
+  try{ localStorage.clear(); }catch{}
+  note('All local data wiped. Reloading…');
+  setTimeout(()=>location.reload(), 600);
+}
+
+/* ---------------- Boot ---------------- */
+document.getElementById('btnDiag').onclick = toggleDiag;
+document.getElementById('btnSeed').onclick = reSeed;
+document.getElementById('btnClearSeed').onclick = clearSeed;
+document.getElementById('btnWipe').onclick = wipeAll;
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await loadBranding();
+  await refreshCounts();
+  await renderFlags();
+});
+</script>
+
+<!-- Engines (kept consistent across app) -->
+<script src="/scripts/qrcode.min.js?v=1.1"></script>
+<script src="/scripts/barcode.js?v=8.4.6"></script>
+<script src="/scripts/app-wiring.js?v=1.1"></script>
+<script src="/scripts/seed-and-diagnostics.js?v=1.3"></script>
+</body>
+</html>

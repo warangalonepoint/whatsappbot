@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Lab Catalog · Clinic PWA</title>
+
+  <!-- PWA + base styles -->
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <!-- Dexie (future-ready) -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+
+  <!-- App config (kept for consistency with your project) -->
+  <script src="./config/config.js"></script>
+  <script src="./scripts/db.js"></script>
+
+  <style>
+    :root{
+      --bg-gradient:linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec);
+      --mint:#E8F6ED; --lav:#F0EAFE; --peach:#FFF3E8; --teal:#C8F1EC;
+      --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#17B26A;
+      --r:16px; --shadow:0 6px 18px rgba(0,0,0,.06);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;background:var(--bg-gradient);color:var(--ink)}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+    a{color:inherit;text-decoration:none}
+
+    .header{display:flex;align-items:center;justify-content:space-between;
+      padding:10px 12px;background:#DED8F2b3;border-radius:12px;box-shadow:var(--shadow);margin-top:10px}
+    .header .logo{height:40px}
+    .small{font-size:12px;color:var(--muted)}
+
+    .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:#D6E5DD}
+    .banner img{width:100%;transform:scale(.65);transform-origin:center;opacity:.95;mix-blend-mode:multiply;display:block}
+
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .input,select{border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;width:100%}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .btn.ghost{background:#fff}
+    .badge{display:inline-block;border:1px solid #e2e8f0;border-radius:999px;padding:2px 8px;font-size:11px}
+    .table{width:100%;border-collapse:collapse;font-size:13px}
+    .table th,.table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+    .table th{background:#f1f5f9;position:sticky;top:0;z-index:1}
+    .right{text-align:right}
+
+    .footer{text-align:center;padding:14px 4px;font-size:13px;color:var(--muted);margin:18px 0}
+
+    .pill{border:1px solid #e5e7eb; background:#F8FAFC; border-radius:999px; padding:6px 10px; font-size:12px}
+    .hint{font-size:12px;color:#64748b}
+    .hide{display:none}
+
+    .editable{background:#fff6; border-radius:6px; padding:2px 6px}
+    .editable:focus{outline:2px solid #a7f3d0; background:#fff}
+
+    @media (max-width:720px){
+      .table{font-size:12px}
+      .banner img{transform:scale(.8)}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img class="logo" src="./assets/logo.png" alt="logo">
+      <div>
+        <div style="font-weight:700;font-size:18px">Lab Catalog</div>
+        <div class="small">Maintain tests & prices · Receive OPD lab orders</div>
+      </div>
+    </div>
+    <div class="row" style="gap:8px">
+      <a class="btn" href="./lab-hub.html">Lab Hub</a>
+      <a class="btn" href="./frontoffice.html">Home</a>
+    </div>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner" aria-hidden="true"><img src="./assets/banner.png" alt=""></div>
+
+  <!-- Test Catalog -->
+  <div class="card" style="background:var(--mint)">
+    <div class="row" style="justify-content:space-between;align-items:end">
+      <div class="row" style="flex:1 1 auto">
+        <div style="flex:2 1 320px">
+          <label>Test name</label>
+          <input id="tname" class="input" placeholder="CBC / CRP / NS1" autocomplete="off">
+        </div>
+        <div style="flex:0 0 160px">
+          <label>Price (₹)</label>
+          <input id="tprice" class="input" type="number" min="0" step="1" placeholder="₹">
+        </div>
+        <div class="row" style="flex:0 0 auto">
+          <button class="btn primary" id="btnAddTest">Add / Update</button>
+          <button class="btn" id="btnClearForm">Clear</button>
+        </div>
+      </div>
+
+      <div class="row" style="flex:0 0 auto">
+        <input id="q" class="input" placeholder="Search tests…" style="width:220px">
+        <select id="sortBy" class="input" style="width:160px">
+          <option value="name">Sort: Name</option>
+          <option value="price">Sort: Price</option>
+        </select>
+        <button class="btn" id="btnSeed">Seed</button>
+        <button class="btn" id="btnCSV">Export CSV</button>
+        <input id="csvIn" type="file" accept=".csv" class="hide">
+        <button class="btn" id="btnImport">Import CSV</button>
+        <span class="badge" id="countBadge">0 tests</span>
+      </div>
+    </div>
+
+    <div class="hint" style="margin-top:6px">Tip: Press <span class="pill">Enter</span> to add/update. Double-click a price to edit inline. <span class="pill">Ctrl</span>+<span class="pill">F</span> searches, <span class="pill">Ctrl</span>+<span class="pill">S</span> exports CSV.</div>
+
+    <table class="table" style="margin-top:10px" id="tTable" aria-label="Lab test catalog">
+      <thead>
+        <tr>
+          <th style="width:56px">#</th>
+          <th>Test</th>
+          <th class="right" style="width:140px">Price (₹)</th>
+          <th style="width:180px">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2" class="right" style="font-weight:800">Average Price</td>
+          <td class="right" id="avgPrice">0</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- Incoming Orders -->
+  <div class="card" style="background:var(--peach)">
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <h3 style="margin:0">Incoming Lab Orders</h3>
+        <div class="small" id="queueInfo">—</div>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnClearQueue">Clear Queue</button>
+      </div>
+    </div>
+
+    <table class="table" id="qTable" aria-label="Incoming lab orders">
+      <thead>
+        <tr>
+          <th style="width:110px">Time</th>
+          <th style="width:100px">PID</th>
+          <th>Name</th>
+          <th>Tests</th>
+          <th class="right" style="width:120px">Total (₹)</th>
+          <th style="width:160px">Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/* ========== Utilities ========== */
+const $ = s => document.querySelector(s);
+const fmt = n => Number(n||0).toLocaleString('en-IN');
+function confirmx(msg){ return window.confirm(msg); }
+function debounce(fn,ms=250){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
+/* ========== Catalog persistence ========== */
+const KEY='lab_tests_json';
+function normalize(arr){
+  return (arr||[])
+    .filter(x=>x && (x.name||x.n))
+    .map(x=>({name:(x.name||x.n||'').trim(), price:+(x.price||x.p||0)}))
+    .filter(x=>x.name);
+}
+function loadTests(){
+  try{ return normalize(JSON.parse(localStorage.getItem(KEY)||'[]')); }catch{ return []; }
+}
+function saveTests(arr){ localStorage.setItem(KEY, JSON.stringify(normalize(arr))); }
+
+let TESTS = loadTests();
+let VIEW = []; // filtered + sorted
+
+/* ========== Render Catalog ========== */
+function renderTests(){
+  const q = ($('#q').value||'').trim().toLowerCase();
+  const sortBy = $('#sortBy').value;
+
+  VIEW = TESTS
+    .filter(t => !q || t.name.toLowerCase().includes(q))
+    .sort((a,b)=>{
+      if(sortBy==='price') return (a.price||0)-(b.price||0) || a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name);
+    });
+
+  const tb = $("#tTable tbody"); tb.innerHTML='';
+  let sum=0;
+  VIEW.forEach((t,i)=>{
+    sum += (+t.price||0);
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>${t.name}</td>
+      <td class="right">
+        <span class="editable" contenteditable="true" data-name="${encodeURIComponent(t.name)}" onfocus="selectEditable(this)">${(+t.price||0).toFixed(0)}</span>
+      </td>
+      <td>
+        <button class="btn" onclick="prefill('${t.name.replace(/'/g,"&#39;")}','${t.price}')">Edit</button>
+        <button class="btn" onclick="delTest('${t.name.replace(/'/g,"&#39;")}')">Delete</button>
+      </td>
+    `;
+    tb.appendChild(tr);
+  });
+  $("#countBadge").textContent = `${VIEW.length} ${VIEW.length===1?'test':'tests'}`;
+  $("#avgPrice").textContent = VIEW.length ? fmt(sum/VIEW.length) : '0';
+}
+window.selectEditable = el => {
+  const r = document.createRange(); r.selectNodeContents(el);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+};
+document.addEventListener('blur', e=>{
+  const el = e.target;
+  if(el.matches('.editable')){
+    const name = decodeURIComponent(el.dataset.name||'');
+    const price = Math.max(0, Math.round(+el.textContent.trim()||0));
+    const ix = TESTS.findIndex(t=>t.name.toLowerCase()===name.toLowerCase());
+    if(ix>=0){
+      TESTS[ix].price = price;
+      saveTests(TESTS);
+      renderTests();
+    }
+  }
+}, true);
+
+/* ========== Catalog Actions ========== */
+function prefill(name, price){ $('#tname').value=name; $('#tprice').value=price||0; $('#tname').focus(); }
+window.prefill = prefill;
+
+function addOrUpdate(){
+  const name = ($('#tname').value||'').trim();
+  const price = Math.max(0, Math.round(+($('#tprice').value||0)));
+  if(!name){ $('#tname').focus(); return; }
+  const ix = TESTS.findIndex(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(ix>=0){ TESTS[ix].price = price; }
+  else { TESTS.push({name,price}); }
+  saveTests(TESTS);
+  $('#tname').value=''; $('#tprice').value='';
+  renderTests();
+}
+function clearForm(){ $('#tname').value=''; $('#tprice').value=''; $('#tname').focus(); }
+function delTest(name){
+  if(!confirmx(`Delete "${name}" from catalog?`)) return;
+  TESTS = TESTS.filter(t=>t.name.toLowerCase()!==name.toLowerCase());
+  saveTests(TESTS);
+  renderTests();
+}
+window.delTest = delTest;
+
+$("#btnAddTest").onclick = addOrUpdate;
+$("#btnClearForm").onclick = clearForm;
+$("#q").addEventListener('input', debounce(renderTests, 120));
+$("#sortBy").addEventListener('change', renderTests);
+
+/* Seed */
+$("#btnSeed").onclick = ()=>{
+  const seed = [
+    {name:'CBP',price:300},{name:'CRP',price:400},{name:'TYPHOID IgM IgG',price:300},{name:'CUE',price:150},
+    {name:'RBS',price:50},{name:'TSB',price:300},{name:'DENGUE IgM IgG',price:800},{name:'MALARIA FOR Pv Pf',price:800},
+    {name:'T3, T4, TSH',price:500},{name:'URINE C/S AUTOMATED',price:1100},{name:'URINE C/S CONVENTION',price:700},
+    {name:'LFT',price:250},{name:'CREATININE',price:150},{name:'HBA1C',price:550},{name:'LIPID PROFILE',price:550},
+    {name:'SERUM ELECTROLYTES',price:100},{name:'BLOOD GROUPING',price:100}
+  ];
+  const names = new Set(TESTS.map(t=>t.name.toLowerCase()));
+  seed.forEach(s=>{ if(!names.has(s.name.toLowerCase())) TESTS.push(s); });
+  saveTests(TESTS); renderTests();
+};
+
+/* CSV export/import */
+$("#btnCSV").onclick = ()=>{
+  const rows = [['Test','Price']];
+  TESTS.forEach(t=> rows.push([t.name, String(+t.price||0)]));
+  const csv = rows.map(r=> r.map(x=>{
+    const s=String(x).replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='lab_tests.csv'; a.click(); URL.revokeObjectURL(a.href);
+};
+$("#btnImport").onclick = ()=> $("#csvIn").click();
+$("#csvIn").addEventListener('change', ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const lines = String(rd.result||'').split(/\r?\n/).filter(Boolean);
+    const out = [];
+    for(let i=0;i<lines.length;i++){
+      const line = lines[i];
+      if(i===0 && /test/i.test(line) && /price/i.test(line)) continue; // skip header
+      const cols = parseCSV(line);
+      const name = (cols[0]||'').trim(); const price = Math.max(0, Math.round(+cols[1]||0));
+      if(name) out.push({name,price});
+    }
+    // merge by name
+    const map=new Map(TESTS.map(t=>[t.name.toLowerCase(),t]));
+    out.forEach(t=>{
+      const k=t.name.toLowerCase();
+      if(map.has(k)) map.get(k).price = t.price;
+      else map.set(k,{name:t.name,price:t.price});
+    });
+    TESTS = Array.from(map.values());
+    saveTests(TESTS); renderTests();
+    ev.target.value='';
+  };
+  rd.readAsText(f);
+});
+function parseCSV(line){
+  const out=[]; let cur=''; let q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){ if(line[i+1]==='"'){ cur+='"'; i++; } else { q=!q; } }
+    else if(c===',' && !q){ out.push(cur); cur=''; }
+    else cur+=c;
+  }
+  out.push(cur); return out;
+}
+
+/* Keyboard: Enter to add; Ctrl+S export; Escape clears */
+document.addEventListener('keydown', e=>{
+  if(['INPUT','TEXTAREA'].includes((e.target||{}).tagName)){
+    if(e.key==='Enter' && (e.target.id==='tname' || e.target.id==='tprice')) addOrUpdate();
+  }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); $("#btnCSV").click(); }
+  if(e.key==='Escape'){ clearForm(); }
+});
+
+/* ========== Incoming Orders from OPD ========== */
+const QKEY='lab_orders_queue';
+function loadQueue(){ try{ const a=JSON.parse(localStorage.getItem(QKEY)||'[]'); return Array.isArray(a)?a:[]; }catch{ return []; } }
+function saveQueue(a){ localStorage.setItem(QKEY, JSON.stringify(a)); }
+
+function renderQueue(){
+  const list = loadQueue();
+  $("#queueInfo").textContent = `${list.length} pending`;
+  const tb=$("#qTable tbody"); tb.innerHTML='';
+
+  list.slice().reverse().forEach((o,revIdx)=>{ // newest first
+    const i = list.length - 1 - revIdx;
+    const t = new Date(o.ts||Date.now()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const tests = (o.items||[]).map(x=>x.test||x.name||'').filter(Boolean).join(', ');
+    const total = Number(o.total ?? (o.items||[]).reduce((s,x)=> s + Number(x.price||0)*Number(x.qty||1), 0));
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t}</td>
+      <td>${o.pid||''}</td>
+      <td>${o.name||''}</td>
+      <td>${tests}</td>
+      <td class="right">${fmt(total)}</td>
+      <td>
+        <button class="btn" onclick="markDone(${i})">Mark Done</button>
+        <button class="btn" onclick="removeQ(${i})">Remove</button>
+      </td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+window.markDone = (i)=>{ const q=loadQueue(); q.splice(i,1); saveQueue(q); renderQueue(); };
+window.removeQ = (i)=>{ if(confirmx('Remove this order?')){ const q=loadQueue(); q.splice(i,1); saveQueue(q); renderQueue(); } };
+$("#btnClearQueue").onclick = ()=>{ if(confirmx('Clear all pending orders?')){ saveQueue([]); renderQueue(); } };
+
+/* ========== Boot ========== */
+document.addEventListener('DOMContentLoaded', ()=>{
+  renderTests();
+  renderQueue();
+  setInterval(renderQueue, 8000);
+  if ('serviceWorker' in navigator) { try{ navigator.serviceWorker.register('./service-worker.js'); }catch{} }
+});
+</script>
+</body>
+</html>

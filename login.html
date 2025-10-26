@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Login · Clinic PWA</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <script defer src="./scripts/auth.js?v=fs1"></script>
+  <style>
+    :root{--bg:linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec);--card:#fff;--ink:#0f172a;--muted:#475569;--primary:#17B26A;--r:16px;--shadow:0 8px 24px rgba(0,0,0,.08)}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .wrap{width:min(980px,100%);padding:16px}
+    .header{display:flex;align-items:center;justify-content:space-between;background:#DED8F2b3;border-radius:16px;padding:10px 14px;box-shadow:var(--shadow);margin-bottom:14px}
+    .logo{height:40px}.title{font-weight:900}.sub{font-size:12px;color:#64748b}
+    .grid{display:grid;grid-template-columns:1.1fr 1fr;gap:14px}@media(max-width:900px){.grid{grid-template-columns:1fr}}
+    .card{background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:16px}
+    .chip{padding:8px 12px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;font-weight:800;cursor:pointer;margin:0 8px 8px 0}
+    .chip.active{background:var(--primary);color:#fff;border-color:transparent}
+    .pinbox{font-size:24px;letter-spacing:2px;padding:10px 12px;border:2px solid #e2e8f0;border-radius:12px;width:100%;text-align:center}
+    .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .key{padding:14px 0;border-radius:12px;border:1px solid #e2e8f0;background:#fff;font-weight:900;font-size:18px;cursor:pointer;user-select:none}
+    .key.action{background:#F1F5F9}.key.primary{background:var(--primary);color:#fff;border:none}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;font-weight:800;cursor:pointer;text-decoration:none;color:inherit}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .error{display:none;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:8px 10px;font-weight:700;margin:8px 0}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div style="display:flex;gap:10px;align-items:center">
+      <img class="logo" src="./assets/logo.png" alt="logo"><div><div class="title">Sign in</div><div class="sub">Choose role · Enter PIN</div></div>
+    </div>
+    <div style="display:flex;gap:8px"><a class="btn" href="./index.html">Home</a><a class="btn" href="./tv.html">TV</a></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div id="err" class="error">Wrong PIN. Try again.</div>
+      <div style="margin-bottom:8px">
+        <button class="chip active" data-role="admin">Admin</button>
+        <button class="chip" data-role="doctor">Doctor</button>
+        <button class="chip" data-role="supervisor">Supervisor</button>
+        <button class="chip" data-role="front-office">Front Office</button>
+      </div>
+
+      <input id="pin" class="pinbox" type="password" inputmode="numeric" placeholder="••••" readonly style="margin:8px 0 12px"/>
+
+      <div class="keypad" style="margin-bottom:10px">
+        <button class="key">1</button><button class="key">2</button><button class="key">3</button>
+        <button class="key">4</button><button class="key">5</button><button class="key">6</button>
+        <button class="key">7</button><button class="key">8</button><button class="key">9</button>
+        <button class="key action" data-act="clear">C</button><button class="key">0</button><button class="key action" data-act="back">⌫</button>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="loginBtn" class="btn primary">Login</button>
+        <button id="clearBtn" class="btn">Clear</button>
+      </div>
+      <div class="sub" style="margin-top:8px">Pins are configurable in Admin.</div>
+    </div>
+
+    <div class="card" style="overflow:hidden;background:#D6E5DD">
+      <img src="./assets/banner.png" alt="Banner" style="width:100%;transform:scale(.62);opacity:.95;mix-blend-mode:multiply;display:block">
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+  const pin=$('#pin'), err=$('#err'); let role='admin';
+
+  document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
+    $$('.chip').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+    role=c.dataset.role; pin.value=''; err.style.display='none';
+  }));
+
+  function add(n){ if(pin.value.length<12) pin.value+=n; }
+  function back(){ pin.value=pin.value.slice(0,-1); }
+  function clear(){ pin.value=''; err.style.display='none'; }
+
+  $$('.key').forEach(k=>k.addEventListener('click',()=>{
+    const a=k.dataset.act; if(a==='clear') return clear(); if(a==='back') return back();
+    add(k.textContent.trim());
+  }));
+  $('#clearBtn').addEventListener('click',clear);
+
+  function route(r){
+    if (r==='admin') location.href='./admin.html';
+    else if (r==='doctor') location.href='./dashboard.html';
+    else if (r==='supervisor') location.href='./supervisor-hub.html';
+    else if (r==='front-office') location.href='./frontoffice.html';
+    else location.href='./index.html';
+  }
+
+  function doLogin(){
+    err.style.display='none';
+    const p=(pin.value||'').trim();
+    if(!p){ err.textContent='Enter PIN'; err.style.display='block'; return; }
+    const r = AUTH.login(p);
+    if(!r){ err.textContent='Wrong PIN. Try again.'; err.style.display='block'; return; }
+    setTimeout(()=>route(r), 60);
+  }
+
+  $('#loginBtn').addEventListener('click', doLogin);
+  addEventListener('keydown', e=>{
+    if(/^\d$/.test(e.key)) add(e.key);
+    if(e.key==='Backspace') back();
+    if(e.key==='Enter') doLogin();
+  });
+})();
+</script>
+
+<script>
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
+</script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OPD → TV Remote</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="stylesheet" href="./styles.css"/>
+<script defer src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+<script defer src="./scripts/pharmacy-branding.js"></script>
+<style>
+:root{ --r:16px; --shadow:0 10px 26px rgba(15,23,42,.10); --banner-h:160px; }
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui}
+.wrap{max-width:1100px;margin:0 auto;padding:12px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:16px;background:var(--glass);backdrop-filter:blur(10px);box-shadow:var(--shadow);margin:10px 0}
+.logo{height:40px}
+.banner{height:var(--banner-h);display:flex;align-items:center;justify-content:center;margin:8px 0;border-radius:16px;overflow:hidden}
+.banner img{max-height:100%;max-width:100%;object-fit:contain;opacity:.95;mix-blend-mode:multiply}
+.btn{border:0;border-radius:12px;padding:9px 12px;background:#f4f4f5;font-weight:700;cursor:pointer}
+.btn.primary{background:var(--primary);color:#fff}
+.card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:12px}
+.grid{display:grid;gap:12px;grid-template-columns:1.2fr .8fr}
+@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+.input,select{border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;width:100%}
+.small{color:#64748b;font-size:12px}
+.list{height:60vh;overflow:auto;border:1px solid #e5e7eb;border-radius:12px}
+.row{display:grid;grid-template-columns:90px 1fr 110px;gap:8px;padding:8px;align-items:center;border-bottom:1px solid #f1f5f9}
+.row:hover{background:#f8fafc}
+.row.active{outline:2px solid var(--primary);background:#eefcf5}
+.badge{display:inline-block;border:1px solid #e5e7eb;border-radius:999px;padding:2px 8px;background:#fff;font-weight:700}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px;align-items:center}
+.right{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.token{font-weight:900}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img id="logo" class="logo" src="./assets/logo.png" alt="logo">
+      <div>
+        <div style="font-weight:900">OPD → TV Remote</div>
+        <div class="small">Select “Now Serving”, queue “Next”, and broadcast to TV</div>
+      </div>
+    </div>
+    <a class="btn" href="./tv.html" target="_blank">Open TV</a>
+  </div>
+
+  <div class="banner"><img id="banner" src="./assets/banner.png" alt="banner"></div>
+
+  <div class="grid">
+    <!-- Left: Today’s queue -->
+    <section class="card">
+      <div class="right" style="margin-bottom:8px">
+        <input id="q" class="input" placeholder="Search patient / token ( / )" style="max-width:280px">
+        <select id="len" class="input" style="max-width:140px" title="1…6 quick keys">
+          <option value="3">Next list: 3</option>
+          <option value="4" selected>Next list: 4</option>
+          <option value="5">Next list: 5</option>
+          <option value="6">Next list: 6</option>
+        </select>
+        <button class="btn" id="btnReload" title="Alt+R">Reload</button>
+      </div>
+
+      <div class="list" id="list"></div>
+      <div class="small" style="margin-top:6px">
+        ↑/↓ select · <b>Enter</b> Call (set “Now”) · <b>N</b> Next · <b>R</b> Recall · <b>1–6</b> next length
+      </div>
+    </section>
+
+    <!-- Right: Broadcast -->
+    <section class="card">
+      <div class="kv"><div>Now Serving</div><div><input id="now" class="input token" placeholder="e.g. A12"/></div></div>
+      <div class="kv" style="margin-top:8px"><div>Next (CSV)</div><div><input id="next" class="input" placeholder="A13,A14,A15,A16"/></div></div>
+      <div class="kv" style="margin-top:8px"><div>Ticker</div><div><input id="ticker" class="input" placeholder="Welcome"/></div></div>
+      <div class="right" style="margin-top:10px">
+        <button class="btn" id="btnRecall">Recall</button>
+        <button class="btn primary" id="btnSend">Broadcast</button>
+      </div>
+      <div class="small" style="margin-top:8px">Broadcasts via <b>BroadcastChannel</b> (instant) + <b>localStorage</b> (fallback)</div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ---------- Branding ---------- */
+PharmacyBranding?.onChange?.(b=>{
+  const l=document.getElementById('logo'); if(l) l.src=b.logoUrl||'./assets/logo.png';
+  const bn=document.getElementById('banner'); if(bn) bn.src=b.bannerUrl||'./assets/banner.png';
+  if(b.bannerHeight){ document.documentElement.style.setProperty('--banner-h', b.bannerHeight); }
+});
+
+/* ---------- Dexie bootstrap ---------- */
+const db = new Dexie('clinicdb');
+db.version(1).stores({ bookings:'++id, date, time, patientName, token, status, doctor' });
+
+/* ---------- Helpers ---------- */
+const $ = s => document.querySelector(s);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+let _rows=[], _sel=0;
+
+function render(){
+  const q=($('#q').value||'').toLowerCase().trim();
+  const cont=$('#list'); cont.innerHTML='';
+  const rows=_rows.filter(r=>{
+    const hay=[r.token,r.patientName,r.doctor].join(' ').toLowerCase();
+    return !q || hay.includes(q);
+  });
+  rows.forEach((r,i)=>{
+    const div=document.createElement('div');
+    div.className='row' + (i===_sel?' active':'');
+    div.dataset.i=i;
+    div.innerHTML=`
+      <div class="token">${r.token||'-'}</div>
+      <div>${r.patientName||'(patient)'} <span class="badge">${r.doctor||''}</span></div>
+      <div style="text-align:right">${r.time||''} <span class="small">${r.status||''}</span></div>`;
+    div.onclick=()=>{ _sel=i; render(); };
+    cont.appendChild(div);
+  });
+}
+
+async function loadToday(){
+  await db.open();
+  const t=todayISO();
+  let rows=[];
+  try{
+    rows = await db.table('bookings').where('date').equals(t).toArray();
+  }catch{}
+  // Sort by token then time
+  rows.sort((a,b)=> String(a.token||'').localeCompare(String(b.token||'')) || String(a.time||'').localeCompare(String(b.time||'')));
+  _rows=rows;
+  _sel=0;
+  render();
+}
+
+/* ---------- Broadcast plumbing ---------- */
+let _bc=null;
+try{ _bc = new BroadcastChannel('opd-tv'); }catch{}
+function broadcast(payload){
+  // BC
+  try{ _bc?.postMessage(payload); }catch{}
+  // LS fallback
+  try{
+    if('now' in payload)    localStorage.setItem('tv_now', String(payload.now||''));
+    if('next' in payload)   localStorage.setItem('tv_next', (payload.next||[]).join(','));
+    if('ticker' in payload) localStorage.setItem('tv_ticker', String(payload.ticker||''));
+  }catch{}
+}
+
+function pushUI(){
+  const now=$('#now').value.trim();
+  const next=$('#next').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const ticker=$('#ticker').value.trim();
+  broadcast({now,next,ticker});
+}
+
+/* ---------- Actions ---------- */
+function callSelected(){
+  const r=_rows[_sel]; if(!r) return;
+  $('#now').value = r.token || '';
+  // compose next list starting after selected
+  const len = +$('#len').value || 4;
+  const next = _rows.slice(_sel+1, _sel+1+len).map(x=>x.token).filter(Boolean);
+  $('#next').value = next.join(',');
+  pushUI();
+}
+function recallNow(){ pushUI(); }
+function nextOne(){
+  if(_sel < _rows.length-1){ _sel++; callSelected(); render(); }
+}
+
+/* ---------- Events ---------- */
+document.getElementById('btnReload').onclick = loadToday;
+document.getElementById('btnSend').onclick   = pushUI;
+document.getElementById('btnRecall').onclick = recallNow;
+
+document.getElementById('q').addEventListener('keydown',(e)=>{
+  if(e.key==='Enter'){ e.preventDefault(); render(); }
+});
+
+window.addEventListener('keydown',(e)=>{
+  // search focus with '/'
+  if(e.key==='/' && !e.ctrlKey && !e.metaKey && !e.altKey){ e.preventDefault(); $('#q').focus(); $('#q').select(); return; }
+  // Up/Down navigate
+  if(e.key==='ArrowDown'){ e.preventDefault(); _sel=Math.min(_sel+1,_rows.length-1); render(); }
+  if(e.key==='ArrowUp'){ e.preventDefault(); _sel=Math.max(_sel-1,0); render(); }
+  // Enter = call
+  if(e.key==='Enter'){ e.preventDefault(); callSelected(); }
+  // N next, R recall
+  if((e.key==='n'||e.key==='N')){ e.preventDefault(); nextOne(); }
+  if((e.key==='r'||e.key==='R')){ e.preventDefault(); recallNow(); }
+  // 1..6 set next length
+  if(/^[1-6]$/.test(e.key)){ $('#len').value = String(e.key); callSelected(); }
+  // Alt+R reload
+  if(e.altKey && (e.key==='r'||e.key==='R')){ e.preventDefault(); loadToday(); }
+});
+
+/* ---------- Boot ---------- */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await loadToday();
+  // Pre-fill ticker from LS if any
+  const t = localStorage.getItem('tv_ticker') || 'Welcome';
+  document.getElementById('ticker').value = t;
+});
+</script>
+</body>
+</html>

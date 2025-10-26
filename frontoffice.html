@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script src="./config/config.js"></script>
+  <script src="./scripts/db.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Front Office · Clinic PWA</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <style>
+    :root{
+      /* locked pastel theme used across app */
+      --bg-gradient:linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+      --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --pink:#FBD6E3; --teal:#C8F5E4; --amber:#FFE9B3;
+      --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+      --r:16px; --shadow:0 6px 18px rgba(0,0,0,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui;background:var(--bg-gradient);color:var(--ink)}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+    .header{
+      display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+      background:rgba(214,229,221,.7); /* mint tint */
+      border:1px solid #0001;border-radius:12px;margin-top:10px;
+      box-shadow:var(--shadow);backdrop-filter:saturate(120%) blur(2px);
+    }
+    .header .logo{height:40px}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:600;cursor:pointer}
+    .btn:hover{background:#f1f5f9}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:#DED8F2}
+    .banner img{width:100%;transform:scale(.65);transform-origin:center;border-radius:var(--r);display:block;mix-blend-mode:multiply;opacity:.95}
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+
+    /* KPI strip */
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .kpi{border:1px solid #e5e7eb;border-radius:14px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+    .kpi .label{font-size:12px;color:var(--muted)}
+    .kpi .num{font-size:22px;font-weight:900;margin-top:6px}
+    .kpi.mint{background:var(--mint)}
+    .kpi.peach{background:var(--peach)}
+    .kpi.teal{background:var(--teal)}
+    .kpi.amber{background:var(--amber)}
+
+    /* Tiles */
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:10px}
+    .tile{border-radius:var(--r);padding:20px;text-align:left;box-shadow:var(--shadow);transition:.25s transform ease;border:1px solid #00000010}
+    .tile:hover{transform:translateY(-4px)}
+    .tile h3{margin:4px 0 6px 0}
+    .tile p{margin:0;color:var(--muted);font-size:13px}
+    .badge{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+    .t-book{background:var(--mint)}
+    .t-bstat{background:var(--lav)}
+    .t-lab{background:var(--peach)}
+    .t-tv{background:var(--teal)}
+
+    .footer{text-align:center;padding:16px 4px;font-size:13px;color:var(--muted);margin:22px 0 14px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <img class="logo" src="./assets/logo.png" alt="logo">
+    <div>
+      <div style="font-weight:900;font-size:18px">Front Office</div>
+      <div style="font-size:13px;color:var(--muted)">Bookings · Lab · TV</div>
+    </div>
+    <a class="btn" href="./index.html">Home</a>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner"><img src="./assets/banner.png" alt="Clinic Banner"></div>
+
+  <!-- KPIs -->
+  <div class="card">
+    <div class="kpis">
+      <div class="kpi mint"><div class="label">Bookings Today</div><div class="num" id="k_today">0</div></div>
+      <div class="kpi peach"><div class="label">Total Patients</div><div class="num" id="k_pat">0</div></div>
+      <div class="kpi teal"><div class="label">Lab Queue</div><div class="num" id="k_labq">0</div></div>
+      <div class="kpi amber"><div class="label">Active TV Screens</div><div class="num" id="k_tv">0</div></div>
+    </div>
+  </div>
+
+  <!-- Tiles (OPD Live removed; Booking Status added) -->
+  <div class="grid">
+    <a class="tile t-book" href="./bookings.html">
+      <div class="badge">FO</div>
+      <h3>Bookings</h3>
+      <p>Register, reschedule, check-in patients.</p>
+    </a>
+
+    <a class="tile t-bstat" href="./booking-status.html">
+      <div class="badge">Live</div>
+      <h3>Booking Status</h3>
+      <p>Track today’s bookings by status: new, checked-in, with doctor, completed.</p>
+    </a>
+
+    <a class="tile t-lab" href="./lab-hub.html">
+      <div class="badge">Lab</div>
+      <h3>Lab Hub</h3>
+      <p>Collect samples, update results, print reports.</p>
+    </a>
+
+    <a class="tile t-tv" href="./tv.html">
+      <div class="badge">Queue</div>
+      <h3>TV / Queue Screen</h3>
+      <p>Display live token/room status in the waiting area.</p>
+    </a>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/* Basic KPI loaders (Dexie + LS), kept consistent with app */
+async function refreshKPIs(){
+  try{
+    const db = new Dexie('clinicdb'); await db.open();
+    const tnames = db.tables.map(t=>t.name);
+    const today = new Date().toISOString().slice(0,10);
+
+    let bookings=0, patients=0;
+    if(tnames.includes('bookings')) bookings = await db.table('bookings').where('date').equals(today).count();
+    if(tnames.includes('patients')) patients = await db.table('patients').count();
+
+    document.getElementById('k_today').textContent = bookings;
+    document.getElementById('k_pat').textContent   = patients;
+
+    db.close();
+  }catch(e){ console.warn(e); }
+
+  // Lab queue from LS (fallback)
+  let labQ = 0;
+  try{
+    const q = JSON.parse(localStorage.getItem('lab_orders_queue')||'[]');
+    labQ = Array.isArray(q) ? q.length : 0;
+  }catch{}
+  document.getElementById('k_labq').textContent = labQ;
+
+  // TV active screens — if you track sessions, derive; else fallback 0
+  let tv = 0;
+  try{
+    const s = JSON.parse(localStorage.getItem('tv_sessions')||'[]');
+    tv = Array.isArray(s) ? s.filter(x=>x.active).length : 0;
+  }catch{}
+  document.getElementById('k_tv').textContent = tv;
+}
+
+document.addEventListener('DOMContentLoaded', refreshKPIs);
+window.addEventListener('storage', refreshKPIs);
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("./service-worker.js"); }
+</script>
+
+<!-- engines -->
+<script src="/scripts/qrcode.min.js?v=1.1"></script>
+<script src="/scripts/barcode.js?v=8.4.6"></script>
+<script src="/scripts/seed-and-diagnostics.js?v=1.2"></script>
+</body>
+</html>

@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Supervisor Hub · Clinic PWA</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="stylesheet" href="./styles.css"/>
+
+<!-- Dexie (DB) -->
+<script defer src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+<script defer src="./scripts/db.js"></script>
+
+<style>
+/* ---------- Locked pastel palette (matches app) ---------- */
+:root{
+  --bg-gradient: linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+  --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --pink:#FBD6E3; --teal:#C8F5E4; --amber:#FFE9B3; --gray:#f5f5f5;
+  --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+  --r:18px; --shadow:0 6px 18px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 system-ui;background:var(--bg-gradient);color:var(--ink)}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+
+/* Header */
+.header{
+  display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+  background:rgba(214,229,221,.7); /* mint tint */
+  border:1px solid rgba(0,0,0,.06);border-radius:12px;margin-top:10px;
+  box-shadow:var(--shadow);backdrop-filter:saturate(120%) blur(2px);
+}
+.header .logo{height:40px}
+.btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:600;cursor:pointer}
+.btn:hover{background:#f1f5f9}
+
+/* Banner */
+.banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:#DED8F2}
+.banner img{width:100%;transform:scale(.7);transform-origin:center;border-radius:var(--r);display:block;mix-blend-mode:multiply;opacity:.95}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:14px}
+.kpi{border-radius:16px;padding:12px;text-align:center;box-shadow:var(--shadow);border:1px solid #00000010}
+.kpi .label{font-size:12px;color:var(--muted)}
+.kpi .num{font-size:22px;font-weight:900;margin-top:6px}
+.k1{background:var(--mint)} .k2{background:var(--peach)}
+.k3{background:var(--lav)} .k4{background:var(--amber)}
+.k5{background:var(--pink)} .k6{background:var(--teal)}
+
+/* Tiles */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:16px}
+.tile{border-radius:var(--r);padding:20px;text-align:left;box-shadow:var(--shadow);transition:.25s transform ease;border:1px solid #00000010}
+.tile:hover{transform:translateY(-4px)}
+.tile h3{margin:4px 0 6px 0}
+.tile p{margin:0;color:var(--muted);font-size:13px}
+.badge{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+
+/* Tile colours */
+.t1{background:var(--mint)}     /* Inventory */
+.t2{background:var(--peach)}    /* Sales */
+.t3{background:var(--lav)}      /* Purchases */
+.t4{background:var(--pink)}     /* Returns */
+.t5{background:var(--teal)}     /* GST */
+.t6{background:#E7ECFF}         /* Suppliers */
+.t7{background:#FFE5F4}         /* Bookings */
+.t8{background:#E6FFF6}         /* Lab */
+.t9{background:#FFF8E1}         /* Pharmacy Hub */
+
+/* Footer */
+.footer{text-align:center;padding:16px 4px;font-size:13px;color:var(--muted);margin:22px 0 14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img id="logo" class="logo" src="./assets/logo.png" alt="logo">
+      <div>
+        <div style="font-weight:900;font-size:18px">Supervisor Hub</div>
+        <div id="clinicTag" style="font-size:13px;color:var(--muted)">Operations · Pharmacy · Inventory</div>
+      </div>
+    </div>
+    <a class="btn" href="./index.html">Home</a>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner">
+    <img id="banner" src="./assets/banner.png" alt="Clinic Banner">
+  </div>
+
+  <!-- KPIs -->
+  <section class="kpis">
+    <div class="kpi k1"><div class="label">Sales Today</div><div class="num" id="k_salesToday">₹0</div></div>
+    <div class="kpi k2"><div class="label">Purchases (This Month)</div><div class="num" id="k_purchMonth">₹0</div></div>
+    <div class="kpi k3"><div class="label">Low Stock (≤2)</div><div class="num" id="k_low">0</div></div>
+    <div class="kpi k4"><div class="label">Near Expiry (≤2 mo)</div><div class="num" id="k_exp">0</div></div>
+    <div class="kpi k5"><div class="label">Returns (This Month)</div><div class="num" id="k_returnsMonth">0</div></div>
+    <div class="kpi k6"><div class="label">Bookings Today</div><div class="num" id="k_bookingsToday">0</div></div>
+  </section>
+
+  <!-- Tiles -->
+  <section class="grid">
+    <a class="tile t9" href="./pharmacy.html">
+      <div class="badge" id="phNameBadge">Pharmacy</div>
+      <h3>Pharmacy Hub</h3>
+      <p>Live KPIs, returns log, quick routing to modules.</p>
+    </a>
+
+    <a class="tile t1" href="./inventory.html">
+      <div class="badge">FEFO</div>
+      <h3>Inventory</h3>
+      <p>Manage batches, expiries, low stock alerts.</p>
+    </a>
+
+    <a class="tile t2" href="./sales.html">
+      <div class="badge">POS</div>
+      <h3>Sales</h3>
+      <p>Dispense from FEFO, print retail bill (A5).</p>
+    </a>
+
+    <a class="tile t3" href="./purchases.html">
+      <div class="badge">GRN</div>
+      <h3>Purchases</h3>
+      <p>Add distributor invoices, update stock (A4).</p>
+    </a>
+
+    <a class="tile t4" href="./returns.html">
+      <div class="badge">Reverse</div>
+      <h3>Returns</h3>
+      <p>Sales/Purchase returns, stock adjust, print slip (A5).</p>
+    </a>
+
+    <a class="tile t5" href="./gst.html">
+      <div class="badge">Report</div>
+      <h3>GST Reports</h3>
+      <p>CGST/SGST slabs, monthly summary, export.</p>
+    </a>
+
+    <a class="tile t6" href="./suppliers.html">
+      <div class="badge">Accounts</div>
+      <h3>Supplier Accounts</h3>
+      <p>Payables, payments, due balance, CSV.</p>
+    </a>
+
+    <a class="tile t7" href="./bookings.html">
+      <div class="badge">FO</div>
+      <h3>Bookings</h3>
+      <p>Day schedule and walk-ins overview.</p>
+    </a>
+
+    <a class="tile t8" href="./lab-hub.html">
+      <div class="badge">Lab</div>
+      <h3>Lab Hub</h3>
+      <p>Orders, processing, results & records.</p>
+    </a>
+  </section>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/* ===== Branding (DB.settings('branding') or LS fallback) ===== */
+function readLSBranding(){ try{ return JSON.parse(localStorage.getItem('branding_json')||'null')||null; }catch{ return null; } }
+async function applyBranding(){
+  let b=null;
+  try{ await DB?.open?.(); b = await DB?.settings?.get?.('branding'); b = b?.val || b?.value || null; }catch(e){}
+  if(!b) b = readLSBranding();
+  const logoEl=document.getElementById('logo');
+  const banEl =document.getElementById('banner');
+  const phBadge=document.getElementById('phNameBadge');
+  const tagEl=document.getElementById('clinicTag');
+  if(b?.logoUrl)   logoEl.src = b.logoUrl;
+  if(b?.bannerUrl) banEl.src  = b.bannerUrl;
+  if(b?.pharmacyName) phBadge.textContent = b.pharmacyName;
+  if(b?.clinicTag) tagEl.textContent = b.clinicTag;
+}
+
+/* ===== KPI data (Dexie-first with graceful fallback) ===== */
+function ymd(d){ return new Date(d).toISOString().slice(0,10); }
+function startOfMonth(d){ d=new Date(d); d.setDate(1); return ymd(d); }
+
+async function kpis(){
+  const today = ymd(new Date());
+  const first = startOfMonth(new Date());
+  let salesToday=0, purchMonth=0, low=0, exp=0, retMonth=0, bookingsToday=0;
+
+  try{
+    await DB?.open?.();
+
+    // Sales today (pharmacy)
+    const sales = await DB?.sales?.toArray?.() || [];
+    salesToday = sales
+      .filter(s=> (s.source==='pharmacy' || !('source' in s)) && s.date===today)
+      .reduce((a,s)=>a+(+s.total||0),0);
+
+    // Purchases this month
+    const purchases = await DB?.purchases?.toArray?.() || [];
+    purchMonth = purchases
+      .filter(p=> (p.date||'')>=first && (p.date||'')<=today)
+      .reduce((a,p)=>a+(+p.total||+p.subtotal||0),0);
+
+    // Batches → low stock & near expiry
+    const batches = await DB?.batches?.toArray?.() || [];
+    low = batches.filter(b=> (+b.stockQty||0) <= 2).length;
+    exp = batches.filter(b=>{
+      const expStr = b.expiry || b.exp || ''; if(!expStr) return false;
+      const dt = new Date(expStr+'-01'); const now = new Date();
+      const months = (dt.getFullYear()-now.getFullYear())*12 + (dt.getMonth()-now.getMonth());
+      return months <= 2;
+    }).length;
+
+    // Returns this month
+    const rets = await DB?.returns?.toArray?.() || [];
+    retMonth = rets.filter(r=> (r.date||'')?.slice(0,7)===today.slice(0,7)).length;
+
+    // Bookings today
+    const bookings = await DB?.bookings?.toArray?.() || [];
+    bookingsToday = bookings.filter(b=> (b.date||'')===today).length;
+
+  }catch(e){
+    // Fallbacks via localStorage if DB not ready
+    const read = k=>{ try{return JSON.parse(localStorage.getItem(k)||'[]');}catch{return [];} };
+
+    const sLS = read('pharma_sales_json');
+    salesToday = sLS.filter(s=> (s.date||'')===today).reduce((a,s)=>a+(+s.total||0),0);
+
+    const pLS = read('pharma_purchases_json');
+    purchMonth = pLS.filter(p=> (p.date||'')>=first && (p.date||'')<=today)
+                    .reduce((a,p)=>a+(+p.total||+p.subtotal||0),0);
+
+    const stock = read('pharma_stock_json');
+    low = stock.filter(b=> (+b.qty||0) <= 2).length;
+    // near-expiry best-effort if exp in MM/YY
+    exp = stock.filter(b=>{
+      const mmYY=b.exp||''; if(!mmYY.includes('/')) return false;
+      const [m,y]=mmYY.split('/').map(n=>parseInt(n,10));
+      const dt = new Date(2000+y,(m-1)||0,1);
+      const now = new Date();
+      const months = (dt.getFullYear()-now.getFullYear())*12 + (dt.getMonth()-now.getMonth());
+      return months <= 2;
+    }).length;
+
+    const rLS = read('pharma_returns_json');
+    retMonth = rLS.filter(r=> (r.date||'')?.slice(0,7)===today.slice(0,7)).length;
+
+    // bookings not in LS in most flows; leave 0
+  }
+
+  // Paint
+  document.getElementById('k_salesToday').textContent  = '₹'+Number(salesToday||0).toFixed(0);
+  document.getElementById('k_purchMonth').textContent  = '₹'+Number(purchMonth||0).toFixed(0);
+  document.getElementById('k_low').textContent         = low||0;
+  document.getElementById('k_exp').textContent         = exp||0;
+  document.getElementById('k_returnsMonth').textContent= retMonth||0;
+  document.getElementById('k_bookingsToday').textContent= bookingsToday||0;
+}
+
+/* Boot */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await applyBranding();
+  await kpis();
+  // SW (optional)
+  if("serviceWorker" in navigator){ navigator.serviceWorker.register("./service-worker.js"); }
+});
+</script>
+</body>
+</html>

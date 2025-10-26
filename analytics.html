@@ -1,0 +1,982 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Pharmacy · Reports (with Profit)</title>
+  <meta name="robots" content="noindex,nofollow"/>
+
+  <!-- Paths aligned to root like your other pages -->
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <!-- Dexie + DB wrapper -->
+  <script defer src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <script defer src="./scripts/db.js"></script>
+  <script defer src="./scripts/pharmacy-branding.js"></script>
+
+  <!-- Chart.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ===== Match pharmacy.html colours (pastel palette) ===== */
+    :root{
+      --bg-gradient: linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+      --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --pink:#FBD6E3; --teal:#C8F5E4; --amber:#FFE9B3; --gray:#f4f4f5;
+      --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+      --header-tint:#D6E5DD; --header-tint-rgba:214,229,221;  /* Mint */
+      --banner-tint:#DED8F2; --banner-tint-rgba:222,216,242;  /* Lavender */
+      --shadow:0 6px 18px rgba(0,0,0,.08); --r:16px;
+    }
+
+    body{margin:0;font:14px/1.5 system-ui;background:var(--bg-gradient);color:var(--ink)}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1400px;margin:0 auto;padding:12px}
+
+    /* Header/breadcrumb bar = mint like pharmacy.html */
+    .header{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:10px 12px;border-radius:12px;margin:10px 0;
+      background:rgba(var(--header-tint-rgba),0.7);
+      border:1px solid rgba(0,0,0,.06);
+      box-shadow:var(--shadow);
+      backdrop-filter:saturate(120%) blur(2px);
+    }
+    .header .logo{height:40px}
+    .header .title{font-weight:900;font-size:18px}
+    .header .sub{font-size:12px;color:var(--muted)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+    /* Banner = lavender like pharmacy.html */
+    .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:var(--banner-tint)}
+    .banner img{width:100%;transform:scale(.65);transform-origin:center;border-radius:var(--r);mix-blend-mode:multiply;opacity:.95;display:block}
+    .banner::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(var(--banner-tint-rgba),.3),rgba(var(--banner-tint-rgba),.3))}
+
+    .btn{border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;background:#fff;font-weight:700;cursor:pointer}
+    .btn:hover{background:#f1f5f9}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+
+    .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:12px}
+    .chip{border:0;border-radius:14px;padding:6px 10px;background:#e2f7ec}
+    .muted{color:var(--muted)}
+    .grid{display:grid;gap:10px}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+    /* KPIs with same pastel look (no HTML change; nth-child colours) */
+    .kpis{display:grid;gap:10px;grid-template-columns:repeat(6,1fr)}
+    .kpi{border-radius:16px;box-shadow:var(--shadow);padding:12px;background:#fff;border:1px solid #e2e8f0}
+    .kpi h4{margin:0;font-size:13px;color:#475569}
+    .kpi b{display:block;font-size:20px;margin-top:4px}
+    .kpis .kpi:nth-child(1){background:var(--peach)}   /* Sales */
+    .kpis .kpi:nth-child(2){background:var(--lav)}     /* Purchases */
+    .kpis .kpi:nth-child(3){background:var(--teal)}    /* Profit */
+    .kpis .kpi:nth-child(4){background:var(--amber)}   /* Margin */
+    .kpis .kpi:nth-child(5){background:var(--mint)}    /* Stock */
+    .kpis .kpi:nth-child(6){background:var(--gray)}    /* Expiry */
+
+    .tabs{display:flex;gap:8px;flex-wrap:wrap}
+    .tab{padding:8px 12px;border-radius:10px;background:#f3f4f6;cursor:pointer;font-weight:600}
+    .tab.active{background:#111827;color:#fff}
+
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+    th{background:#f8fafc;position:sticky;top:0;z-index:1}
+    .right{text-align:right}
+    .warn{color:#b45309}
+    .footer{text-align:center;color:#64748b;font-size:12px;margin:16px 0 6px}
+
+    @media (max-width:1200px){ .kpis{grid-template-columns:repeat(3,1fr);} }
+
+    /* Meta editor modal stays neutral */
+    .meta-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+    .meta-backdrop.show{display:flex}
+    .meta-card{width:min(1100px,96vw);max-height:86vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:12px}
+    .meta-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+    .meta-input{border:1px solid #e5e7eb;border-radius:10px;padding:8px 10px}
+    .meta-table{width:100%;border-collapse:collapse;font-size:13px}
+    .meta-table th,.meta-table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+    .meta-table th{background:#f8fafc;position:sticky;top:0;z-index:1}
+    .tag{display:inline-block;border:1px solid #e5e7eb;border-radius:999px;padding:2px 8px;font-size:12px;background:#f9fafb}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header (same visual as pharmacy.html) -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <a class="btn" href="./pharmacy.html">← Pharmacy Hub</a>
+      <img id="logo" class="logo" src="./assets/pharmacy-logo.png" alt="logo"/>
+      <div>
+        <div class="title">Pharmacy Reports</div>
+        <div class="sub">Sales · Purchases · Profit · Stock · Expiry</div>
+      </div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="./sales.html">POS</a>
+      <a class="btn" href="./purchases.html">Purchases</a>
+      <a class="btn" href="./inventory.html">Inventory</a>
+    </div>
+  </div>
+
+  <!-- Lavender banner to match hub -->
+  <div class="banner">
+    <img src="./assets/banner.png" alt="Clinic Banner">
+  </div>
+
+  <!-- Filters -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <label>Quick Range</label>
+        <select id="range" class="btn">
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month" selected>This Month</option>
+          <option value="quarter">This Quarter</option>
+          <option value="fy">FY (Apr–Mar)</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <input id="from" type="date" class="btn" style="display:none"/>
+        <input id="to" type="date" class="btn" style="display:none"/>
+        <button class="btn primary" id="btnApply">Apply</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnWA">Share Summary (WhatsApp)</button>
+        <button class="btn" id="btnCSV">Export CSV (Current Tab)</button>
+        <button class="btn" id="btnEditMeta">Edit Product Meta</button>
+      </div>
+    </div>
+    <div class="muted" id="rangeLabel">Range: This Month</div>
+  </section>
+
+  <!-- KPIs -->
+  <section style="margin-top:10px">
+    <div class="kpis">
+      <div class="kpi" data-tab="sales">
+        <h4>Sales (₹)</h4><b id="kpiSalesVal">—</b><small id="kpiSalesCnt" class="muted">— bills</small>
+      </div>
+      <div class="kpi" data-tab="purchases">
+        <h4>Purchases (₹)</h4><b id="kpiPurchVal">—</b><small id="kpiPurchCnt" class="muted">— invoices</small>
+      </div>
+      <div class="kpi" data-tab="sales">
+        <h4>Gross Profit (₹)</h4><b id="kpiProfitVal">—</b><small class="muted">sales − landing</small>
+      </div>
+      <div class="kpi" data-tab="sales">
+        <h4>Margin %</h4><b id="kpiMarginVal">—</b><small class="muted">profit ÷ sales</small>
+      </div>
+      <div class="kpi" data-tab="stock">
+        <h4>Stock Value (MRP)</h4><b id="kpiStockVal">—</b><small class="muted">on hand</small>
+      </div>
+      <div class="kpi" data-tab="expiry">
+        <h4>Expiry in 30 days</h4><b id="kpiExpiryVal">—</b><small class="muted">batches</small>
+      </div>
+    </div>
+  </section>
+
+  <!-- Charts -->
+  <section class="grid" style="grid-template-columns:1.4fr 1fr; margin-top:10px">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <b>Sales & Profit Trend</b><small class="muted">Pharmacy sales only</small>
+      </div>
+      <canvas id="chartSales" height="160"></canvas>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <b>Purchases Trend</b><small class="muted">Invoice totals</small>
+      </div>
+      <canvas id="chartPurch" height="160"></canvas>
+    </div>
+  </section>
+
+  <section class="grid" style="grid-template-columns:1fr 1fr; margin-top:10px">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <b>Supplier Payables</b><small class="muted">Purchases − Payments</small>
+      </div>
+      <canvas id="chartSup" height="180"></canvas>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <b>Top Profit Products</b><small class="muted">Gross profit by SKU</small>
+      </div>
+      <canvas id="chartTop" height="180"></canvas>
+    </div>
+  </section>
+
+  <!-- Tabs -->
+  <section class="card" style="margin-top:10px">
+    <div class="tabs">
+      <div class="tab active" data-tab="sales">Sales</div>
+      <div class="tab" data-tab="purchases">Purchases</div>
+      <div class="tab" data-tab="supplier">Supplier Ledger</div>
+      <div class="tab" data-tab="stock">Stock Valuation</div>
+      <div class="tab" data-tab="expiry">Expiry</div>
+      <div class="tab" data-tab="catprofit">Profit by Category</div>
+      <div class="tab" data-tab="brandprofit">Profit by Brand</div>
+    </div>
+    <div id="tabWrap" style="margin-top:10px">
+      <div data-pane="sales">
+        <table id="tableSales">
+          <thead>
+          <tr>
+            <th>Date</th><th>Bill No</th><th>Patient</th><th>Items</th>
+            <th class="right">Subtotal</th><th class="right">Landing</th>
+            <th class="right">Gross Profit</th><th class="right">Margin %</th>
+            <th class="right">Discount</th><th class="right">Rounding</th>
+            <th class="right">Total</th><th>Mode</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div data-pane="purchases" style="display:none">
+        <table id="tablePurch">
+          <thead>
+          <tr>
+            <th>Date</th><th>Invoice</th><th>Supplier</th><th>Lines</th>
+            <th class="right">Subtotal</th><th class="right">CGST</th><th class="right">SGST</th><th class="right">IGST</th>
+            <th class="right">Total</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div data-pane="supplier" style="display:none">
+        <table id="tableSup">
+          <thead>
+          <tr>
+            <th>Supplier</th><th class="right">Purchases (₹)</th><th class="right">Payments (₹)</th><th class="right">Due (₹)</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div data-pane="stock" style="display:none">
+        <table id="tableStock">
+          <thead>
+          <tr>
+            <th>SKU</th><th>Name</th><th>Batch</th><th>EXP</th>
+            <th class="right">MRP</th><th class="right">Landing</th><th class="right">Qty</th>
+            <th class="right">Value (MRP)</th><th class="right">Value (Landing)</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div data-pane="expiry" style="display:none">
+        <div class="row" style="margin-bottom:8px">
+          <label>Window</label>
+          <select id="expWindow" class="btn">
+            <option value="30" selected>30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+          </select>
+          <button class="btn" id="expApply">Apply</button>
+        </div>
+        <table id="tableExpiry">
+          <thead>
+          <tr>
+            <th>SKU</th><th>Name</th><th>Batch</th><th>EXP</th><th class="right">Qty</th><th class="warn">Days Left</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div data-pane="catprofit" style="display:none">
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <b>Profit by Category (Form)</b><small class="muted">Gross Profit ₹</small>
+            </div>
+            <canvas id="chartCat" height="180"></canvas>
+          </div>
+          <div class="card">
+            <b>Category Table</b>
+            <table id="tableCat">
+              <thead>
+              <tr><th>Category</th><th class="right">Sales ₹</th><th class="right">Landing ₹</th><th class="right">Gross Profit ₹</th><th class="right">Margin %</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div data-pane="brandprofit" style="display:none">
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <b>Profit by Brand</b><small class="muted">Gross Profit ₹ (top 12)</small>
+            </div>
+            <canvas id="chartBrand" height="180"></canvas>
+          </div>
+          <div class="card">
+            <b>Brand Table</b>
+            <table id="tableBrand">
+              <thead>
+              <tr><th>Brand</th><th class="right">Sales ₹</th><th class="right">Landing ₹</th><th class="right">Gross Profit ₹</th><th class="right">Margin %</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="footer">© 2025 Onestop AI Services · Pharmacy Reports</div>
+</div>
+
+<!-- ===== Product Meta Editor (Category / Brand) ===== -->
+<div id="metaEditor" class="meta-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="meta-card">
+    <div class="meta-row" style="justify-content:space-between">
+      <div>
+        <b>Edit Product Meta</b>
+        <div class="tag" id="metaFilterInfo" style="margin-left:6px;display:none"></div>
+      </div>
+      <div class="meta-row">
+        <input id="metaQ" class="meta-input" placeholder="Search SKU or Name…">
+        <button class="btn" id="metaSearch">Search</button>
+        <button class="btn primary" id="metaSave">Save All</button>
+        <button class="btn" id="metaClose">Close</button>
+      </div>
+    </div>
+    <table class="meta-table" id="metaTable">
+      <thead>
+      <tr>
+        <th style="width:140px">SKU</th>
+        <th>Name</th>
+        <th style="width:180px">Category (form)</th>
+        <th style="width:180px">Brand</th>
+      </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="meta-row" style="justify-content:space-between;margin-top:8px">
+      <small class="muted">Tip: Press <b>Tab</b> to move across fields, <b>Enter</b> to save. Changes are stored in <code>DB.products</code>.</small>
+      <div id="metaStatus" class="muted"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Branding (logo from admin, safe fallback) */
+PharmacyBranding?.onChange?.(b=>{
+  const el=document.getElementById('logo');
+  if(el) el.src = b.logoUrl || './assets/pharmacy-logo.png';
+});
+
+/* ---------- Utils ---------- */
+const $ = s => document.querySelector(s);
+const fmt = (n)=> '₹'+Number(n||0).toFixed(2);
+const pct = (n)=> Number(n||0).toFixed(1)+'%';
+const ymd = (d)=> new Date(d).toISOString().slice(0,10);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+function startOfWeek(d){ d=new Date(d); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return ymd(d); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return ymd(x); }
+function firstOfMonth(d){ d=new Date(d); d.setDate(1); return ymd(d); }
+function firstOfQuarter(d){ d=new Date(d); const q=Math.floor(d.getMonth()/3)*3; return ymd(new Date(d.getFullYear(), q, 1)); }
+function firstOfFY(d){ d=new Date(d); const fyStart = new Date(d.getMonth()>=3? d.getFullYear(): d.getFullYear()-1, 3, 1); return ymd(fyStart); }
+function sum(arr, fn){ let s=0; for(const x of arr) s+=fn(x)||0; return s; }
+function daysLeft(exp){ if(!exp) return 9999; const dt = new Date(exp+'-01'); return Math.ceil((dt - new Date())/86400000); }
+
+/* ---------- Date range state ---------- */
+let gFrom, gTo;
+function setQuickRange(kind){
+  const t=todayISO(); let f=t;
+  if(kind==='today'){ f=t; }
+  if(kind==='week'){ f=startOfWeek(t); }
+  if(kind==='month'){ f=firstOfMonth(t); }
+  if(kind==='quarter'){ f=firstOfQuarter(t); }
+  if(kind==='fy'){ f=firstOfFY(t); }
+  gFrom=f; gTo=t;
+  $('#from').value=f; $('#to').value=t;
+  $('#rangeLabel').textContent = `Range: ${$('#range').selectedOptions[0].text}`;
+}
+$('#range').addEventListener('change', ()=>{
+  const v=$('#range').value;
+  const isCustom = v==='custom';
+  $('#from').style.display = isCustom?'inline-block':'none';
+  $('#to').style.display   = isCustom?'inline-block':'none';
+  if(!isCustom) setQuickRange(v);
+});
+$('#btnApply').onclick = ()=>{
+  if($('#range').value==='custom'){
+    gFrom = $('#from').value || todayISO();
+    gTo   = $('#to').value   || todayISO();
+    $('#rangeLabel').textContent = `Range: ${gFrom} → ${gTo}`;
+  }
+  refreshAll();
+};
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    const tab=el.dataset.tab;
+    document.querySelectorAll('[data-pane]').forEach(p=> p.style.display = (p.dataset.pane===tab)?'block':'none');
+  });
+});
+document.querySelectorAll('.kpi').forEach(k=>{
+  k.addEventListener('click', ()=>{
+    const tab = k.dataset.tab; if(!tab) return;
+    const target = document.querySelector(`.tab[data-tab="${tab}"]`);
+    target?.click();
+  });
+});
+
+/* ---------- CSV Export (current tab) ---------- */
+function toCSV(rows, header){
+  const lines=[header.join(',')];
+  rows.forEach(r=>{
+    const line = header.map(h=>{
+      const v = (r[h] ?? '');
+      const s = String(v).replace(/"/g,'""');
+      return /[",\n]/.test(s) ? `"${s}"` : s;
+    }).join(',');
+    lines.push(line);
+  });
+  return new Blob([lines.join('\n')], {type:'text/csv'});
+}
+$('#btnCSV').onclick = ()=>{
+  const pane = document.querySelector('[data-pane]:not([style*="display: none"])');
+  if(!pane) return;
+  const table = pane.querySelector('table'); if(!table) return;
+  const headers = Array.from(table.querySelectorAll('thead th')).map(th=> th.innerText.trim());
+  const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr=>{
+    const obj={}; Array.from(tr.children).forEach((td,i)=> obj[headers[i]] = td.innerText.trim());
+    return obj;
+  });
+  const blob = toCSV(rows, headers);
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='report.csv'; a.click(); URL.revokeObjectURL(a.href);
+};
+
+/* ---------- WhatsApp Share ---------- */
+async function shareWA(summary){
+  await DB.open();
+  const cfg = await DB.settings.get('owner_phone');
+  const phone = (cfg?.val || '').replace(/\D/g,'');
+  if(!/^\d{10}$/.test(phone)){ alert('Owner phone not set in settings.owner_phone'); return; }
+  const text = [
+    `📊 *Pharmacy Summary*`,
+    `Range: ${gFrom} → ${gTo}`,
+    `Sales: ${fmt(summary.sales)} (${summary.bills} bills)`,
+    `Purchases: ${fmt(summary.purchases)} (${summary.invoices} invoices)`,
+    `Gross Profit: ${fmt(summary.profit)} (${summary.margin.toFixed(1)}%)`,
+    `Stock Value (MRP): ${fmt(summary.stock)}`,
+    `Expiry(30d): ${summary.expCount} batches`
+  ].join('\n');
+  window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(text)}`,'_blank');
+}
+$('#btnWA').onclick = async ()=>{
+  const snapshot = await computeKPIs();
+  shareWA(snapshot);
+};
+
+/* ---------- Charts ---------- */
+let chartSales, chartPurch, chartSup, chartTop, chartCat, chartBrand;
+function ensureChart(ctx, type, data, options){
+  if(ctx._chart){ ctx._chart.destroy(); }
+  const c = new Chart(ctx, {type, data, options});
+  ctx._chart = c; return c;
+}
+
+/* ---------- Lookups for Landing (Cost) ---------- */
+let gBatchIndex = {}; // key: sku|batch -> {rate}
+let gProdIndex  = {}; // sku -> {name, form(category), brand}
+async function buildIndexes(){
+  await DB.open();
+  const [batches, products] = await Promise.all([DB.batches.toArray(), DB.products.toArray()]);
+  gBatchIndex = {};
+  batches.forEach(b=>{
+    const key = `${b.sku}|${(b.batchNo||'').toUpperCase()}`;
+    gBatchIndex[key] = {rate: Number(b.rate||0), mrp:Number(b.mrp||0)};
+  });
+  gProdIndex = {};
+  products.forEach(p=>{
+    gProdIndex[p.sku] = {
+      name: p.name||'',
+      form: (p.form||'Uncategorized'),
+      brand: (p.brandName || p.companyName || 'Unbranded')
+    };
+  });
+}
+function landingForItem(it){
+  if(it.landing!=null) return Number(it.landing)||0;
+  const key = `${it.sku}|${(it.batchNo||'').toUpperCase()}`;
+  const b = gBatchIndex[key];
+  if(b) return Number(b.rate||0);
+  return 0;
+}
+
+/* ---------- Data Loads ---------- */
+async function loadPharmacySales(from,to){
+  await DB.open();
+  const all = await DB.sales.toArray();
+  return all.filter(s=> (s.source==='pharmacy' || !('source' in s)) && s.date>=from && s.date<=to);
+}
+async function loadPurchases(from,to){
+  await DB.open();
+  const all = await DB.purchases.toArray();
+  return all.filter(p=> p.date>=from && p.date<=to);
+}
+async function loadPayments(from,to){
+  await DB.open();
+  const all = await DB.supplier_payments.toArray();
+  return all.filter(p=> p.date>=from && p.date<=to);
+}
+async function stockSnapshot(){
+  await DB.open();
+  const batches = await DB.batches.toArray();
+  const products = await DB.products.toArray();
+  const nameBySku = {}; products.forEach(p=> nameBySku[p.sku]=p.name);
+  return batches.map(b=> ({
+    sku:b.sku, name:nameBySku[b.sku]||'', batchNo:b.batchNo, expiry:b.expiry||'',
+    mrp:Number(b.mrp||0), landing:Number(b.rate||0), qty:Number(b.stockQty||0)
+  }));
+}
+
+/* ---------- KPIs with Profit ---------- */
+async function computeKPIs(){
+  const [sales, purchases, stock] = await Promise.all([
+    loadPharmacySales(gFrom,gTo), loadPurchases(gFrom,gTo), stockSnapshot()
+  ]);
+  let salesAmt = 0, landingAmt = 0, bills = sales.length;
+
+  sales.forEach(s=>{
+    salesAmt += Number(s.total||0);
+    (s.items||[]).forEach(it=>{
+      const qty = Number(it.qty||0);
+      const landing = landingForItem(it);
+      landingAmt += landing * qty;
+    });
+  });
+
+  const purchAmt = purchases.reduce((a,p)=>a+Number(p.total||0),0);
+  const profit = salesAmt - landingAmt;
+  const margin = salesAmt>0 ? (profit / salesAmt) * 100 : 0;
+  const stockVal = (await stock).reduce((a,r)=> a + (Number(r.mrp||0)*Number(r.qty||0)), 0);
+  const expCount = (await stock).filter(r=> daysLeft(r.expiry) <= 30).length;
+
+  return {sales: salesAmt, bills, purchases: purchAmt, invoices: purchases.length,
+          profit, margin, stock: stockVal, expCount};
+}
+
+/* ---------- Renderers (unchanged logic) ---------- */
+async function renderKPIs(){
+  const k = await computeKPIs();
+  $('#kpiSalesVal').textContent = fmt(k.sales);
+  $('#kpiSalesCnt').textContent = `${k.bills} bills`;
+  $('#kpiPurchVal').textContent = fmt(k.purchases);
+  $('#kpiPurchCnt').textContent = `${k.invoices} invoices`;
+  $('#kpiProfitVal').textContent = fmt(k.profit);
+  $('#kpiMarginVal').textContent = pct(k.margin);
+  $('#kpiStockVal').textContent = fmt(k.stock);
+  $('#kpiExpiryVal').textContent = k.expCount;
+}
+function datesBetween(from,to){
+  const out=[]; let d=from;
+  while(d<=to){ out.push(d); d=addDays(d,1); }
+  return out;
+}
+async function renderCharts(){
+  const [sales, purch] = await Promise.all([
+    loadPharmacySales(gFrom,gTo), loadPurchases(gFrom,gTo)
+  ]);
+  const labels = datesBetween(gFrom,gTo);
+
+  const salesByDate={}, profitByDate={};
+  labels.forEach(d=>{ salesByDate[d]=0; profitByDate[d]=0; });
+  sales.forEach(s=>{
+    const ds = s.date;
+    let saleSum = Number(s.total||0);
+    let landingSum = 0;
+    (s.items||[]).forEach(it=> landingSum += landingForItem(it) * Number(it.qty||0));
+    salesByDate[ds] = (salesByDate[ds]||0) + saleSum;
+    profitByDate[ds] = (profitByDate[ds]||0) + (saleSum - landingSum);
+  });
+
+  const purchByDate={}; labels.forEach(d=>purchByDate[d]=0);
+  purch.forEach(p=> purchByDate[p.date]=(purchByDate[p.date]||0)+Number(p.total||0));
+
+  const ctx1 = document.getElementById('chartSales').getContext('2d');
+  chartSales = ensureChart(ctx1, 'line', {
+    labels,
+    datasets:[
+      {label:'Sales ₹', data: labels.map(d=>salesByDate[d]||0), yAxisID:'y'},
+      {label:'Gross Profit ₹', data: labels.map(d=>profitByDate[d]||0), yAxisID:'y1'}
+    ]
+  }, {
+    responsive:true,
+    plugins:{legend:{display:true}},
+    scales:{ y:{type:'linear', position:'left'}, y1:{type:'linear', position:'right', grid:{drawOnChartArea:false}} }
+  });
+
+  const ctx2 = document.getElementById('chartPurch').getContext('2d');
+  chartPurch = ensureChart(ctx2, 'bar', {
+    labels, datasets:[{label:'Purchases ₹', data: labels.map(d=>purchByDate[d]||0)}]
+  }, {responsive:true, plugins:{legend:{display:false}}});
+
+  const profitBySku={};
+  sales.forEach(s=> (s.items||[]).forEach(it=>{
+    const gp = (Number(it.rate||0) - landingForItem(it)) * Number(it.qty||0);
+    profitBySku[it.sku] = (profitBySku[it.sku]||0) + gp;
+  }));
+  const top = Object.entries(profitBySku).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const ctx4 = document.getElementById('chartTop').getContext('2d');
+  chartTop = ensureChart(ctx4, 'bar', {
+    labels: top.map(x=>x[0]),
+    datasets:[{label:'Gross Profit ₹', data: top.map(x=>Number(x[1]||0))}]
+  }, {responsive:true, plugins:{legend:{display:false}}});
+
+  const pays = await loadPayments(gFrom,gTo);
+  const bySup = {};
+  purch.forEach(p=> { bySup[p.supplierId]=bySup[p.supplierId]||{purch:0,pay:0}; bySup[p.supplierId].purch+=Number(p.total||0); });
+  pays.forEach(p=> { bySup[p.supplierId]=bySup[p.supplierId]||{purch:0,pay:0}; bySup[p.supplierId].pay+=Number(p.amount||0); });
+  const supLabels = Object.keys(bySup);
+  const supDue = supLabels.map(s=> Math.max(0, (bySup[s].purch - bySup[s].pay)));
+  const ctx3 = document.getElementById('chartSup').getContext('2d');
+  chartSup = ensureChart(ctx3, 'bar', {
+    labels: supLabels, datasets:[{label:'Due ₹', data: supDue}]
+  }, {indexAxis:'y', responsive:true, plugins:{legend:{display:false}}});
+}
+
+async function renderSalesTable(){
+  const rows = await loadPharmacySales(gFrom,gTo);
+  const tb = document.querySelector('#tableSales tbody'); tb.innerHTML='';
+  rows.sort((a,b)=> (a.date.localeCompare(b.date)) || (a.billNo||'').localeCompare(b.billNo||'') );
+  rows.forEach(r=>{
+    const subtotal = Number(r.subtotal||0);
+    let landingSum = 0;
+    (r.items||[]).forEach(it=> landingSum += landingForItem(it) * Number(it.qty||0));
+    const gp = subtotal - landingSum;
+    const m = subtotal>0 ? (gp/subtotal*100) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.date||''}</td>
+      <td>${r.billNo||''}</td>
+      <td>${(r.patientName||'-')} (${r.patientPhone||''})</td>
+      <td>${(r.items||[]).length}</td>
+      <td class="right">${subtotal.toFixed(2)}</td>
+      <td class="right">${landingSum.toFixed(2)}</td>
+      <td class="right">${gp.toFixed(2)}</td>
+      <td class="right">${m.toFixed(1)}%</td>
+      <td class="right">${Number(r.billDisc||0).toFixed(2)}</td>
+      <td class="right">${Number(r.rounding||0).toFixed(2)}</td>
+      <td class="right">${Number(r.total||0).toFixed(2)}</td>
+      <td>${r.mode||''}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+async function renderPurchTable(){
+  const rows = await loadPurchases(gFrom,gTo);
+  const tb = document.querySelector('#tablePurch tbody'); tb.innerHTML='';
+  rows.sort((a,b)=> (a.date.localeCompare(b.date)) || (a.invNo||'').localeCompare(b.invNo||'') );
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.date||''}</td>
+      <td>${r.invNo||''}</td>
+      <td>${r.supplierId||''}</td>
+      <td>${(r.items||[]).length}</td>
+      <td class="right">${Number(r.subtotal||0).toFixed(2)}</td>
+      <td class="right">${Number(r.taxCgst||0).toFixed(2)}</td>
+      <td class="right">${Number(r.taxSgst||0).toFixed(2)}</td>
+      <td class="right">${Number(r.taxIgst||0).toFixed(2)}</td>
+      <td class="right">${Number(r.total||0).toFixed(2)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+async function renderSupplierLedger(){
+  const purch = await loadPurchases(gFrom,gTo);
+  const pays  = await loadPayments(gFrom,gTo);
+  const supIdx = {};
+  purch.forEach(p=> {
+    const s=p.supplierId||'(unknown)';
+    supIdx[s]=supIdx[s]||{p:0, pay:0};
+    supIdx[s].p += Number(p.total||0);
+  });
+  pays.forEach(p=>{
+    const s=p.supplierId||'(unknown)';
+    supIdx[s]=supIdx[s]||{p:0, pay:0};
+    supIdx[s].pay += Number(p.amount||0);
+  });
+  const tb = document.querySelector('#tableSup tbody'); tb.innerHTML='';
+  Object.keys(supIdx).sort().forEach(s=>{
+    const due = Math.max(0, supIdx[s].p - supIdx[s].pay);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${s}</td>
+      <td class="right">${supIdx[s].p.toFixed(2)}</td>
+      <td class="right">${supIdx[s].pay.toFixed(2)}</td>
+      <td class="right">${due.toFixed(2)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+async function renderStockVal(){
+  const snap = await stockSnapshot();
+  const tb = document.querySelector('#tableStock tbody'); tb.innerHTML='';
+  snap.sort((a,b)=> (a.sku||'').localeCompare(b.sku||''));
+  snap.forEach(r=>{
+    const mrpVal = Number(r.mrp||0)*Number(r.qty||0);
+    const landVal = Number(r.landing||0)*Number(r.qty||0);
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.sku}</td>
+      <td>${r.name||''}</td>
+      <td>${r.batchNo||''}</td>
+      <td>${r.expiry||''}</td>
+      <td class="right">${Number(r.mrp||0).toFixed(2)}</td>
+      <td class="right">${Number(r.landing||0).toFixed(2)}</td>
+      <td class="right">${Number(r.qty||0)}</td>
+      <td class="right">${mrpVal.toFixed(2)}</td>
+      <td class="right">${landVal.toFixed(2)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+async function renderExpiry(){
+  const windowDays = Number($('#expWindow').value||30);
+  const snap = await stockSnapshot();
+  const soon = snap.map(r=> ({...r, dleft: daysLeft(r.expiry)}))
+                   .filter(r=> r.dleft <= windowDays)
+                   .sort((a,b)=> a.dleft - b.dleft);
+  const tb = document.querySelector('#tableExpiry tbody'); tb.innerHTML='';
+  soon.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.sku}</td>
+      <td>${r.name||''}</td>
+      <td>${r.batchNo||''}</td>
+      <td>${r.expiry||''}</td>
+      <td class="right">${Number(r.qty||0)}</td>
+      <td class="warn">${r.dleft}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  document.getElementById('kpiExpiryVal').textContent = soon.length;
+}
+document.getElementById('expApply').onclick = renderExpiry;
+
+/* ---------- Profit by Category/Brand ---------- */
+function ensureAgg(obj, key){
+  if(!obj[key]) obj[key]={sales:0, landing:0, profit:0};
+  return obj[key];
+}
+async function computeAggByCatBrand(){
+  const sales = await loadPharmacySales(gFrom,gTo);
+  const byCat={}, byBrand={};
+  sales.forEach(s=>{
+    (s.items||[]).forEach(it=>{
+      const qty = Number(it.qty||0);
+      const sell = Number(it.rate||0) * qty;
+      const land = landingForItem(it) * qty;
+      const sku = it.sku;
+      const meta = gProdIndex[sku] || {form:'Uncategorized', brand:'Unbranded'};
+      const cat = meta.form || 'Uncategorized';
+      const br  = meta.brand || 'Unbranded';
+      const ac = ensureAgg(byCat, cat);
+      ac.sales+=sell; ac.landing+=land; ac.profit+=(sell-land);
+      const ab = ensureAgg(byBrand, br);
+      ab.sales+=sell; ab.landing+=land; ab.profit+=(sell-land);
+    });
+  });
+  return {byCat, byBrand};
+}
+async function renderCatBrand(){
+  const {byCat, byBrand} = await computeAggByCatBrand();
+
+  const catRows = Object.entries(byCat).map(([k,v])=> ({
+    Category:k, Sales:v.sales, Landing:v.landing, Profit:v.profit, Margin: v.sales>0 ? (v.profit/v.sales*100):0
+  })).sort((a,b)=> b.Profit - a.Profit);
+  const tbC = document.querySelector('#tableCat tbody'); tbC.innerHTML='';
+  catRows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.Category}</td>
+      <td class="right">${r.Sales.toFixed(2)}</td>
+      <td class="right">${r.Landing.toFixed(2)}</td>
+      <td class="right">${r.Profit.toFixed(2)}</td>
+      <td class="right">${r.Margin.toFixed(1)}%</td>
+    `;
+    tbC.appendChild(tr);
+  });
+  const catLabels = catRows.map(r=>r.Category);
+  const catProfit = catRows.map(r=>r.Profit);
+  const ctxCat = document.getElementById('chartCat').getContext('2d');
+  chartCat = ensureChart(ctxCat,'bar',{
+    labels: catLabels, datasets:[{label:'Gross Profit ₹', data: catProfit}]
+  }, {indexAxis:'y', responsive:true, plugins:{legend:{display:false}}});
+
+  const brandRows = Object.entries(byBrand).map(([k,v])=> ({
+    Brand:k, Sales:v.sales, Landing:v.landing, Profit:v.profit, Margin: v.sales>0 ? (v.profit/v.sales*100):0
+  })).sort((a,b)=> b.Profit - a.Profit);
+  const tbB = document.querySelector('#tableBrand tbody'); tbB.innerHTML='';
+  brandRows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.Brand}</td>
+      <td class="right">${r.Sales.toFixed(2)}</td>
+      <td class="right">${r.Landing.toFixed(2)}</td>
+      <td class="right">${r.Profit.toFixed(2)}</td>
+      <td class="right">${r.Margin.toFixed(1)}%</td>
+    `;
+    tbB.appendChild(tr);
+  });
+  const topBrand = brandRows.slice(0,12);
+  const brLabels = topBrand.map(r=>r.Brand);
+  const brProfit = topBrand.map(r=>r.Profit);
+  const ctxBrand = document.getElementById('chartBrand').getContext('2d');
+  chartBrand = ensureChart(ctxBrand,'bar',{
+    labels: brLabels, datasets:[{label:'Gross Profit ₹', data: brProfit}]
+  }, {indexAxis:'y', responsive:true, plugins:{legend:{display:false}}});
+
+  document.querySelectorAll('#tableCat tbody tr').forEach(tr=>{
+    const cat = tr.children[0]?.innerText?.trim();
+    if(!cat) return;
+    tr.style.cursor='pointer';
+    tr.title='Click to edit products in this category';
+    tr.addEventListener('click', ()=> openMetaEditor({type:'category', value:cat}));
+  });
+  document.querySelectorAll('#tableBrand tbody tr').forEach(tr=>{
+    const br = tr.children[0]?.innerText?.trim();
+    if(!br) return;
+    tr.style.cursor='pointer';
+    tr.title='Click to edit products in this brand';
+    tr.addEventListener('click', ()=> openMetaEditor({type:'brand', value:br}));
+  });
+}
+
+/* ---------- Product Meta Editor ---------- */
+let META_FILTER = null;
+const metaEl = {
+  wrap: () => document.getElementById('metaEditor'),
+  q:    () => document.getElementById('metaQ'),
+  tbl:  () => document.querySelector('#metaTable tbody'),
+  info: () => document.getElementById('metaFilterInfo'),
+  status:() => document.getElementById('metaStatus'),
+};
+
+function openMetaEditor(filter=null){
+  META_FILTER = filter;
+  metaEl.wrap().classList.add('show');
+  metaEl.wrap().setAttribute('aria-hidden','false');
+  if(filter){
+    metaEl.info().style.display='inline-block';
+    metaEl.info().textContent = `${filter.type==='category'?'Category':'Brand'}: ${filter.value}`;
+  }else{
+    metaEl.info().style.display='none';
+  }
+  metaEl.q().value = '';
+  renderMetaRows();
+}
+function closeMetaEditor(){
+  metaEl.wrap().classList.remove('show');
+  metaEl.wrap().setAttribute('aria-hidden','true');
+  META_FILTER = null;
+  metaEl.tbl().innerHTML='';
+  metaEl.status().textContent='';
+}
+async function fetchMetaRows(){
+  await DB.open();
+  const all = await DB.products.toArray();
+  let rows = all;
+  if(META_FILTER){
+    if(META_FILTER.type==='category'){
+      rows = rows.filter(p => (p.form||'Uncategorized') === META_FILTER.value);
+    }else if(META_FILTER.type==='brand'){
+      rows = rows.filter(p => (p.brandName||'Unbranded') === META_FILTER.value);
+    }
+  }
+  const q = (metaEl.q().value||'').trim().toLowerCase();
+  if(q){
+    rows = rows.filter(p => (p.sku||'').toLowerCase().includes(q) || (p.name||'').toLowerCase().includes(q));
+  }
+  rows.sort((a,b)=> String(a.sku||'').localeCompare(String(b.sku||'')));
+  return rows;
+}
+async function renderMetaRows(){
+  const rows = await fetchMetaRows();
+  const tb = metaEl.tbl(); tb.innerHTML='';
+  rows.forEach(p=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><code>${p.sku||''}</code></td>
+      <td>${p.name||''}</td>
+      <td><input class="meta-input" data-k="form" data-sku="${p.sku}" value="${(p.form||'Uncategorized').replace(/"/g,'&quot;')}"></td>
+      <td><input class="meta-input" data-k="brandName" data-sku="${p.sku}" value="${(p.brandName||p.companyName||'Unbranded').replace(/"/g,'&quot;')}"></td>
+    `;
+    tb.appendChild(tr);
+  });
+  metaEl.status().textContent = `${rows.length} product(s)`;
+}
+async function saveMetaEdits(){
+  const inputs = Array.from(document.querySelectorAll('#metaTable input[data-sku]'));
+  const bySku = {};
+  inputs.forEach(inp=>{
+    const sku = inp.dataset.sku;
+    const k   = inp.dataset.k;
+    const v   = inp.value.trim() || (k==='form'?'Uncategorized':'Unbranded');
+    bySku[sku] = bySku[sku] || {};
+    bySku[sku][k] = v;
+  });
+  const updates=[];
+  for(const [sku,patch] of Object.entries(bySku)){
+    const existing = await DB.products.get(sku);
+    if(!existing) continue;
+    updates.push({...existing, ...patch});
+  }
+  if(!updates.length){ metaEl.status().textContent='No changes'; return; }
+  await DB.products.bulkPut(updates);
+  metaEl.status().textContent = `Saved ${updates.length} product(s). Refreshing…`;
+  await buildIndexes();
+  await renderCatBrand();
+  await renderKPIs();
+  await renderCharts();
+}
+document.getElementById('metaClose').onclick = closeMetaEditor;
+document.getElementById('metaSearch').onclick = renderMetaRows;
+document.getElementById('metaSave').onclick = async ()=>{ await saveMetaEdits(); };
+document.getElementById('metaEditor').addEventListener('click', (e)=>{
+  if(e.target === document.getElementById('metaEditor')) closeMetaEditor();
+});
+document.getElementById('metaQ').addEventListener('keydown', (e)=>{
+  if(e.key==='Enter') renderMetaRows();
+});
+document.getElementById('btnEditMeta').onclick = ()=> openMetaEditor();
+
+/* ---------- Refresh ---------- */
+async function refreshAll(){
+  await DB.open();
+  await buildIndexes();
+  await renderKPIs();
+  await renderCharts();
+  await renderSalesTable();
+  await renderPurchTable();
+  await renderSupplierLedger();
+  await renderStockVal();
+  await renderExpiry();
+  await renderCatBrand();
+}
+
+/* ---------- Boot ---------- */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  setQuickRange('month');
+  await refreshAll();
+});
+</script>
+</body>
+</html>

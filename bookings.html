@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Bookings · Clinic PWA</title>
+
+  <!-- Project deps -->
+  <link rel="manifest" href="../manifest.json"/>
+
+  <!-- DB + helpers (keep db.js in your project root /scripts) -->
+  <script src="../scripts/db.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <script src="../scripts/qrcode.min.js"></script>
+  <script> if(!window.QRCode){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';document.head.appendChild(s);} </script>
+
+  <style>
+    :root{
+      /* Theme defaults (overridden by branding) */
+      --bg-gradient:linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec);
+      --mint:#E8F6ED; --lav:#F0EAFE; --peach:#FFF3E8;
+      --card:#fff; --ink:#0f172a; --muted:#475569; --primary:#17B26A;
+      --r:16px; --shadow:0 6px 18px rgba(0,0,0,.06);
+
+      /* Banner controls (overridden by branding) */
+      --banner-h: 160px;
+      --banner-fit: contain;
+      --banner-bg: var(--lav);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui;background:var(--bg-gradient);color:var(--ink)}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+
+    .header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:color-mix(in oklab, var(--lav) 65%, white 35%);border-radius:12px;box-shadow:var(--shadow);margin-top:10px}
+    .header .logo{height:40px}
+    .header .title{font-weight:700;font-size:18px}
+    .header .sub{font-size:13px;color:var(--muted)}
+
+    .banner{position:relative;overflow:hidden;border-radius:16px;margin:12px 0;background:var(--banner-bg);
+      height:var(--banner-h);display:flex;align-items:center;justify-content:center}
+    .banner img{width:100%;max-height:calc(var(--banner-h) - 10px);object-fit:var(--banner-fit);object-position:center;opacity:.96;mix-blend-mode:multiply;display:block;border-radius:var(--r)}
+
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+    .row{display:flex;flex-wrap:wrap;gap:10px}
+    .right{margin-left:auto}
+    .input,select,textarea{border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;width:100%}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .alert{margin-top:8px;padding:8px 10px;border-radius:8px;background:#dcfce7;color:#065f46;display:none}
+    .table{width:100%;border-collapse:collapse;font-size:13px}
+    .table th,.table td{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}
+    .table th{background:#f1f5f9}
+    .qr-mini{width:44px;height:44px}
+    .footer{text-align:center;padding:14px 4px;font-size:13px;color:#64748b;margin:18px 0}
+    .muted{color:#64748b}
+    .chip{display:inline-block;background:#e2f7ec;border-radius:999px;padding:2px 8px;font-size:12px;margin-left:6px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img id="hdrLogo" class="logo" src="../assets/logo.png" alt="logo">
+      <div>
+        <div class="title">Bookings</div>
+        <div class="sub">
+          PID = (name+phone) · One FREE review in 7 days · WA confirmation · Delete & QR
+        </div>
+      </div>
+    </div>
+    <a class="btn" href="../index.html">← Home</a>
+  </div>
+
+  <!-- Banner (branding-controlled) -->
+  <div class="banner"><img id="hdrBanner" src="../assets/banner.png" alt="Clinic Banner"></div>
+
+  <!-- Search -->
+  <div class="card" style="background:var(--mint)">
+    <div class="row" style="align-items:end">
+      <div style="flex:1 1 260px">
+        <label>Search by PID (returning)</label>
+        <input id="pidSearch" class="input" placeholder="e.g., P01 or P0001">
+      </div>
+      <button class="btn" id="btnSearchPID">Search & Prefill</button>
+      <button class="btn" id="btnClear">Clear</button>
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div class="card" style="background:var(--lav)">
+    <h3>New / Returning Booking</h3>
+    <form id="bookForm">
+      <div class="row">
+        <div style="flex:0 0 140px"><label>PID</label><input id="pid" class="input" readonly></div>
+        <div style="flex:1 1 260px"><label>Patient Name *</label><input id="patientName" class="input" required></div>
+        <div style="flex:1 1 240px"><label>Guardian</label><input id="guardian" class="input"></div>
+        <div style="flex:0 0 160px"><label>Gender *</label>
+          <select id="gender" class="input" required>
+            <option value="">—</option><option>Male</option><option>Female</option><option>Other</option>
+          </select>
+        </div>
+        <div style="flex:0 0 180px"><label>Contact *</label>
+          <input id="contact" class="input" required maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
+        </div>
+        <div style="flex:0 0 160px"><label>Channel *</label>
+          <select id="channel" class="input"><option>Walk</option><option>Online</option><option>WhatsApp</option></select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div style="flex:0 0 180px"><label>DOB</label><input id="dob" type="date" class="input"></div>
+        <div style="flex:0 0 160px"><label>Age (auto)</label><input id="age" class="input" readonly placeholder="3y5m2d"></div>
+        <div style="flex:1 1 260px"><label>Reason</label><input id="reason" class="input" placeholder="Fever, cold, etc."></div>
+      </div>
+
+      <!-- Vitals -->
+      <div class="row">
+        <div style="flex:0 0 120px"><label>Height (cm)</label><input id="height" type="number" step="0.1" inputmode="decimal" class="input"></div>
+        <div style="flex:0 0 120px"><label>Weight (kg)</label><input id="weight" type="number" step="0.1" inputmode="decimal" class="input"></div>
+        <div style="flex:0 0 120px"><label>Temp (°C)</label><input id="temp" type="number" step="0.1" inputmode="decimal" class="input"></div>
+        <div style="flex:0 0 120px"><label>Pulse</label><input id="pulse" type="number" inputmode="numeric" class="input"></div>
+        <div style="flex:0 0 120px"><label>SpO₂ (%)</label><input id="spo2" type="number" inputmode="numeric" class="input"></div>
+        <div style="flex:0 0 120px"><label>BP Sys</label><input id="bpSys" type="number" inputmode="numeric" class="input"></div>
+        <div style="flex:0 0 120px"><label>BP Dia</label><input id="bpDia" type="number" inputmode="numeric" class="input"></div>
+      </div>
+
+      <div class="row">
+        <div style="flex:2 1 360px"><label>Address</label><input id="address" class="input"></div>
+        <div style="flex:1 1 160px"><label>City</label><input id="city" class="input"></div>
+        <div style="flex:0 0 120px"><label>PIN</label><input id="pin" class="input" maxlength="6" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)"></div>
+      </div>
+
+      <div class="row">
+        <div style="flex:0 0 180px"><label>Fees</label><input id="fees" class="input" value="₹ 300" readonly></div>
+        <div style="flex:0 0 160px"><label>Visit Type</label><input id="visitType" class="input" value="new" readonly></div>
+      </div>
+
+      <div class="row" style="align-items:end">
+        <div style="flex:0 0 180px"><label>Payment</label>
+          <select id="payMode" class="input"><option>Cash</option><option>UPI</option><option>Card</option><option>Other</option></select>
+        </div>
+        <div style="flex:1 1 240px"><label>Ref / Notes</label><input id="payRef" class="input" placeholder="UPI ref / notes"></div>
+
+        <div style="display:flex;align-items:center;gap:12px;margin-left:auto">
+          <label style="display:flex;align-items:center;gap:6px">
+            <input id="autoWA" type="checkbox" checked> WhatsApp after save
+          </label>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div class="muted">* Required fields</div>
+        <div style="flex:0 0 420px;display:flex;gap:8px;margin-left:auto">
+          <button class="btn" id="btnPrintLast" type="button">🖨️ Print Last</button>
+          <button class="btn primary" id="btnSave" type="submit">Save & Token</button>
+        </div>
+      </div>
+    </form>
+    <div id="msg" class="alert"></div>
+  </div>
+
+  <!-- Today’s Queue -->
+  <div class="card" style="background:var(--peach)">
+    <div class="row">
+      <h3>Today’s Queue</h3>
+      <div class="right"><button class="btn" id="btnCSV">Export CSV</button></div>
+    </div>
+    <table class="table" id="qTable">
+      <thead>
+        <tr>
+          <th>Time</th><th>PID</th><th>Token</th><th>Type</th><th>QR</th>
+          <th>Name</th><th>Gender</th><th>Age</th><th>Reason</th>
+          <th>Channel</th><th>Payment</th><th>Contact</th>
+          <th>WA</th><th>Delete</th><th>Print</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong></div>
+</div>
+
+<script>
+/* ===================== Branding sync ===================== */
+const THEMES = {
+  pastel: {'--bg-gradient':'linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec)','--mint':'#E8F6ED','--lav':'#F0EAFE','--peach':'#FFF3E8','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#17B26A'},
+  glass:  {'--bg-gradient':'linear-gradient(135deg,#eef2ff,#ecfeff,#fef9c3)','--mint':'#E0F2FE','--lav':'#E9D5FF','--peach':'#FFE4E6','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#0EA5E9'},
+  neo:    {'--bg-gradient':'linear-gradient(145deg,#f1f5f9,#e2e8f0,#f8fafc)','--mint':'#E2F7EC','--lav':'#EDE9FE','--peach':'#FFEAD5','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#111827'},
+  iphone: {'--bg-gradient':'linear-gradient(180deg,#f7f7f7,#f0f0f0)','--mint':'#E6F4EA','--lav':'#EEE7FF','--peach':'#FFE7D6','--card':'#fff','--ink':'#111','--muted':'#4b5563','--primary':'#0A84FF'}
+};
+function applyTheme(name){
+  const m = THEMES[name] || THEMES.pastel;
+  const root = document.documentElement;
+  Object.entries(m).forEach(([k,v])=> root.style.setProperty(k,v));
+}
+function applyBranding(b){
+  applyTheme(b.theme||'pastel');
+  document.getElementById('hdrLogo').src   = b.logoUrl || '../assets/logo.png';
+  document.getElementById('hdrBanner').src = b.bannerUrl || '../assets/banner.png';
+  document.documentElement.style.setProperty('--banner-h',  `${Number(b.bannerH||160)}px`);
+  document.documentElement.style.setProperty('--banner-fit', b.bannerFit||'contain');
+}
+function readLSBranding(){ try{ return JSON.parse(localStorage.getItem('branding_json')||'null')||null; }catch{ return null; } }
+async function loadBranding(){
+  let b=null;
+  try{ await DB.open?.(); b = await DB.settings?.get?.('branding'); b = b?.val || b?.value || null; }catch{}
+  if(!b) b = readLSBranding() || {};
+  applyBranding(b);
+}
+window.addEventListener('storage', (e)=>{ if(e.key==='branding_touch') loadBranding(); });
+
+/* ===================== Utils ===================== */
+const $=s=>document.querySelector(s);
+const todayISO=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
+const msg=(t,ok=false)=>{const el=$("#msg");el.className="alert"+(ok?"":"");el.textContent=t;el.style.display="block";setTimeout(()=>el.style.display="none",2400);};
+const timeStr=ts=>new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const INR_FREE='₹ 0', INR_STD='₹ 300';
+const daysBetween=(d1,d2)=>Math.floor((new Date(d2)-new Date(d1))/86400000);
+
+/* Age */
+function ageParts(d){ if(!d) return null; const dob=new Date(d),now=new Date(); if(isNaN(dob)) return null;
+  let y=now.getFullYear()-dob.getFullYear(), m=now.getMonth()-dob.getMonth(), dd=now.getDate()-dob.getDate();
+  if(dd<0){ m--; dd+=new Date(dob.getFullYear(),dob.getMonth()+1,0).getDate(); }
+  if(m<0){ y--; m+=12; }
+  return {y,m,d:dd};
+}
+function ageYMDCompact(d){ const p=ageParts(d); if(!p) return ''; const parts=[]; if(p.y>0) parts.push(`${p.y}y`); if(p.m>0) parts.push(`${p.m}m`); if(p.d>0||parts.length===0) parts.push(`${p.d}d`); return parts.join(''); }
+$("#dob").addEventListener("change",e=>{$("#age").value=ageYMDCompact(e.target.value);});
+
+/* ===================== DB (onesystem_clinic) ===================== */
+const DB = window.DB || new Dexie('onesystem_clinic');
+if(!window.DB){ DB.version(1).stores({settings:'key',patients:'++id,pid,phone,name',bookings:'++id,date,phone,name,pid'}); }
+
+const dbReady = DB.open?.() || Promise.resolve();
+
+/* ---------- PID helpers (STRICT 1:1 with identity = normName(name)+phone10) ---------- */
+function normName(n){ return String(n||'').trim().toLowerCase().replace(/\s+/g,' '); }
+function phone10(p){ return String(p||'').replace(/\D/g,'').slice(-10); }
+
+async function ensurePidCounter(){
+  await dbReady;
+  const rec = await DB.settings?.get?.('last_pid');
+  if(!rec){ await DB.settings?.put?.({key:'last_pid', val:0}); }
+}
+async function nextPIDMonotonic(padTo=2,prefix='P'){
+  await ensurePidCounter();
+  const rec = await DB.settings.get('last_pid'); const next=(rec?.val||0)+1;
+  await DB.settings.put({key:'last_pid', val:next});
+  return prefix + String(next).padStart(padTo,'0');
+}
+async function getPatientByPID(pid){
+  await dbReady;
+  return await DB.patients.where('pid').equals(pid).first();
+}
+async function getPatientByIdentity(name, phone){
+  await dbReady;
+  const ph = phone10(phone);
+  const list = await DB.patients.where('phone').equals(ph).toArray().catch(()=>[]);
+  return list.find(p => normName(p.name||p.patientName||'') === normName(name)) || null;
+}
+
+/* 7-day review classifier based on bookings history */
+async function classifyVisit(pid, dateISO){
+  await dbReady;
+  const all = await DB.bookings.where('pid').equals(pid).toArray();
+  const paid = all.filter(b=>{
+    const amt = String(b.fees||'').replace(/[^\d]/g,''); return amt!=='' && Number(amt)>0 && b.date<=dateISO;
+  }).sort((a,b)=>(b.date.localeCompare(a.date))||((b.ts||0)-(a.ts||0)))[0];
+  if(!paid) return {type:'new',fees:INR_STD};
+  const delta=daysBetween(paid.date,dateISO);
+  if(delta>7) return {type:'new',fees:INR_STD};
+  const reviewUsed=all.some(b=>(b.date>=paid.date && b.date<=dateISO)&&String(b.visitType||b.type||'').toLowerCase()==='review'&&String(b.fees||'').replace(/[^\d]/g,'')==='0');
+  if(reviewUsed) return {type:'new',fees:INR_STD};
+  return {type:'review',fees:INR_FREE};
+}
+
+/* Token counter (per-day) via settings */
+async function nextToken(){
+  await dbReady;
+  const key='token_today_'+todayISO();
+  const rec=await DB.settings.get(key);
+  const next=(rec?.val||0)+1;
+  await DB.settings.put({key, val:next});
+  return next;
+}
+
+/* WhatsApp */
+function buildWhatsAppText(b, clinicName){
+  const lines=[
+    `Hello from ${clinicName||'Our Clinic'}.`,
+    `Booking confirmed for today ${b.date}. Token #${b.tokenNo||b.token}.`,
+    `PID ${b.pid} · ${b.name||b.patientName}.`,
+    (String(b.visitType||b.type)==='review'?'This visit is REVIEW within 7 days — fees ₹0.':'Consultation fee ₹300.'),
+    'VALID UPTO (Visitdate+7days) WITH ONE FREE REVIEW.',
+    `Please arrive on time. Reply here if you need help.`
+  ];
+  return lines.map(encodeURIComponent).join('%0A');
+}
+function openWhatsApp(phone, text){
+  if(!/^\d{10}$/.test(phone)) return;
+  const url=`https://wa.me/91${phone}?text=${text}`; const w=window.open(url,'_blank'); if(!w) msg('Allow popups to send WhatsApp');
+}
+
+/* Print */
+function openPrint(d){ try{ const payload=encodeURIComponent(JSON.stringify(d)); window.open(`../print/booking-slip.html?print=1&data=${payload}`, '_blank'); }catch{} }
+
+/* ===================== Actions ===================== */
+$("#btnSearchPID").onclick=async()=>{
+  await dbReady;
+  const pid=($("#pidSearch").value||"").trim().toUpperCase();
+  if(!pid) return msg("Enter PID");
+  const p = await DB.patients.where('pid').equals(pid).first();
+  if(!p) return msg("No record for "+pid);
+  $("#pid").value = p.pid||'';
+  $("#patientName").value = p.name||'';
+  $("#contact").value = p.phone||'';
+  $("#gender").value = p.gender||'';
+  $("#dob").value = p.dob||'';
+  $("#age").value = ageYMDCompact(p.dob);
+  msg("Loaded "+pid,true);
+};
+$("#btnClear").onclick=()=>{$("#bookForm").reset();$("#pid").value="";$("#age").value="";};
+$("#btnPrintLast").onclick=()=>{const d=JSON.parse(localStorage.getItem('last_booking')||'null');if(!d)return msg("No recent booking");openPrint(d);} ;
+
+/* Submit */
+document.getElementById('bookForm').addEventListener('submit', async (e)=>{
+  e.preventDefault(); await dbReady;
+  // clinic name from settings (optional)
+  let clinicName='Our Clinic';
+  try{ const r=await DB.settings.get('branding'); clinicName = (r?.val?.clinicName||'Our Clinic'); }catch{}
+
+  const name=$("#patientName").value.trim();
+  const phone=$("#contact").value.trim();
+  const gender=$("#gender").value;
+  if(!name) return msg("Enter name");
+  if(!/^\d{10}$/.test(phone)) return msg("Invalid contact");
+  if(!gender) return msg("Select gender");
+
+  // ---------- PID resolution (strict, no duplicates) ----------
+  const typedPid = ($("#pid").value||'').trim().toUpperCase();
+  const idPatient = await getPatientByIdentity(name, phone);      // same (name, phone)?
+  let pid;
+  if (idPatient) {
+    pid = idPatient.pid; // reuse existing PID for same identity
+  } else if (typedPid) {
+    const owner = await getPatientByPID(typedPid);
+    if (!owner) {
+      pid = await nextPIDMonotonic(2,'P');
+    } else {
+      const sameIdentity =
+        normName(owner.name||owner.patientName||'') === normName(name) &&
+        phone10(owner.phone||owner.contact||'')     === phone10(phone);
+      if (sameIdentity) {
+        pid = owner.pid;
+      } else {
+        pid = await nextPIDMonotonic(2,'P');
+        msg(`PID ${typedPid} belongs to ${owner.name||''} (${phone10(owner.phone)}). Created new PID ${pid} for this patient.`, false);
+      }
+    }
+  } else {
+    pid = await nextPIDMonotonic(2,'P');
+  }
+
+  // persist/update patient row (without changing identity mapping)
+  const nowIso = new Date().toISOString();
+  if (idPatient) {
+    await DB.patients.update(idPatient.id, {
+      gender, dob:$("#dob").value, updatedAt:nowIso,
+      address: $("#address").value, city: $("#city").value, pin: $("#pin").value,
+      guardian: $("#guardian").value,
+      // keep original identity fields intact
+      name: idPatient.name, phone: idPatient.phone
+    });
+  } else {
+    await DB.patients.add({
+      pid, name, phone: phone10(phone), gender, dob: $("#dob").value,
+      address: $("#address").value, city: $("#city").value, pin: $("#pin").value,
+      guardian: $("#guardian").value,
+      createdAt: nowIso, updatedAt: nowIso
+    });
+  }
+  $("#pid").value = pid;
+
+  // visit classifier
+  const visit = await classifyVisit(pid, todayISO());
+  $("#fees").value = visit.fees; $("#visitType").value = visit.type;
+
+  // booking document (compatible with onesystem_clinic schema; extra fields allowed)
+  const tokenNo = await nextToken();
+  const doc = {
+    date: todayISO(),
+    ts: Date.now(),
+    pid,
+    tokenNo,                           // <- schema key
+    status:'queued',
+    name, phone, gender,
+    dob:$("#dob").value, age:($("#age").value || ageYMDCompact($("#dob").value)),
+    reason:$("#reason").value,
+    guardian:$("#guardian").value, address:$("#address").value, city:$("#city").value, pin:$("#pin").value,
+    height:$("#height").value, weight:$("#weight").value, temp:$("#temp").value,
+    pulse:$("#pulse").value, spo2:$("#spo2").value, bpSys:$("#bpSys").value, bpDia:$("#bpDia").value,
+    channel:$("#channel").value, payMode:$("#payMode").value, payRef:$("#payRef").value,
+    visitType: visit.type, fees: visit.fees
+  };
+
+  // save booking
+  await DB.bookings.add(doc);
+
+  // minimal encounter seed
+  try{
+    await DB.encounters?.add?.({
+      pid, date: doc.date, type:'opd', tokenRef:`${pid}-${tokenNo}`,
+      createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(),
+      vitals:{height:doc.height,weight:doc.weight,temp:doc.temp,pulse:doc.pulse,spo2:doc.spo2,bpSys:doc.bpSys,bpDia:doc.bpDia}
+    });
+  }catch{}
+
+  // UI + WA + print
+  localStorage.setItem('last_booking', JSON.stringify(doc));
+  msg(`Saved ${name} · ${visit.type.toUpperCase()} · PID ${pid} · Token ${tokenNo}`, true);
+  await refresh();
+
+  if (document.getElementById('autoWA')?.checked){
+    openWhatsApp(phone, buildWhatsAppText(doc, clinicName));
+  }
+});
+
+/* Delete today-only */
+async function deleteBooking(row){
+  await dbReady;
+  if(row.date && row.date!==todayISO()){ msg('Can only delete today’s bookings', false); return; }
+  try{
+    if(row.id!=null){ await DB.bookings.delete(row.id); }
+    else{
+      const hits=await DB.bookings.where('date').equals(todayISO()).toArray();
+      const found=hits.find(x=>x.pid===row.pid && String(x.tokenNo||'')===String(row.tokenNo||row.token||'')); 
+      if(found?.id!=null) await DB.bookings.delete(found.id);
+    }
+    msg(`Deleted token #${row.tokenNo||row.token} (${row.pid})`, true);
+    await refresh();
+  }catch(e){ console.error(e); msg('Delete failed', false); }
+}
+
+/* List/render today */
+async function listToday(){
+  await dbReady;
+  const rows=await DB.bookings.where('date').equals(todayISO()).toArray();
+  rows.sort((a,b)=>(a.ts||0)-(b.ts||0));
+  return rows;
+}
+async function refresh(){
+  await loadBranding();
+  const rows=await listToday();
+  const tb=$("#qTable tbody"); tb.innerHTML="";
+  for(const r of rows){
+    const qrId=`qr_${r.pid}_${r.tokenNo}`;
+    const waText=buildWhatsAppText(r, (await DB.settings.get('branding'))?.val?.clinicName||'Our Clinic');
+    const waHref=(/^\d{10}$/.test(r.phone))?`https://wa.me/91${r.phone}?text=${waText}`:'#';
+    const chip = (String(r.visitType||r.type).toLowerCase()==='review') ? '<span class="chip">REVIEW · FREE</span>' : '';
+    tb.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${timeStr(r.ts)}</td><td>${r.pid}</td><td>${r.tokenNo||''}</td><td>${r.visitType||''} ${chip}</td>
+        <td><div id="${qrId}" class="qr-mini"></div></td>
+        <td>${r.name||''}</td><td>${r.gender||''}</td><td>${r.age||''}</td>
+        <td>${r.reason||''}</td><td>${r.channel||''}</td><td>${r.payMode||''}</td>
+        <td><a href="tel:${r.phone||''}">${r.phone||''}</a></td>
+        <td><a class="btn" href="${waHref}" target="_blank">WA</a></td>
+        <td><button class="btn" onclick='deleteBooking(${JSON.stringify({id:null,pid:r.pid,tokenNo:r.tokenNo,date:r.date})})'>Delete</button></td>
+        <td><button class="btn" onclick='window.open("../print/booking-slip.html?data=${encodeURIComponent(JSON.stringify(r))}","_blank")'>🖨️</button></td>
+      </tr>`);
+    try{
+      const el=document.getElementById(qrId); if(el){ el.innerHTML="";
+        new QRCode(el,{text:JSON.stringify({pid:r.pid,token:r.tokenNo,name:r.name}),width:44,height:44,correctLevel:QRCode.CorrectLevel.L});
+      }
+    }catch(e){ console.warn('QR fail', e); }
+  }
+}
+
+/* CSV */
+$("#btnCSV").onclick=async()=>{
+  const rows=await listToday();
+  const lines=["Time,PID,Token,Type,Name,Gender,Age,Reason,Channel,Payment,Contact"];
+  rows.forEach(r=>lines.push(`${timeStr(r.ts)},${r.pid},${r.tokenNo||""},${r.visitType||""},${r.name||""},${r.gender||""},${r.age||""},${r.reason||""},${r.channel||""},${r.payMode||""},${r.phone||""}`));
+  const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="bookings.csv"; a.click(); URL.revokeObjectURL(a.href);
+};
+
+/* Boot */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await dbReady;
+  await loadBranding();
+  refresh();
+});
+</script>
+</body>
+</html>

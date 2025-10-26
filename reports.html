@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="./config/config.js"></script>
+<script src="./scripts/db.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Reports · Clinic PWA</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="stylesheet" href="./styles.css"/>
+<script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+
+<style>
+:root{
+  --bg:linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+  --card:#fff; --ink:#0f172a; --muted:#475569; --r:16px;
+  --shadow:0 6px 18px rgba(0,0,0,.06);
+  --accent:#17B26A;
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui;background:var(--bg);color:var(--ink);min-height:100vh}
+.wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+.header{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px;background:#DED8F2b3;border-radius:12px;box-shadow:var(--shadow);margin-top:10px}
+.header .logo{height:40px}
+.card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}
+.kpi h4{margin:0 0 6px;font-size:12px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+.kpi .v{font-weight:900;font-size:22px}
+.kpi .sub{font-size:12px;color:#64748b;margin-top:2px}
+.table{width:100%;border-collapse:collapse;font-size:13px}
+.table th,.table td{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}
+.table th{background:#f1f5f9}
+.footer{text-align:center;padding:14px 4px;font-size:13px;color:#64748b;margin:18px 0}
+.badge{display:inline-block;border:1px solid #e5e7eb;border-radius:999px;padding:2px 8px;font-size:11px}
+.btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer;text-decoration:none;color:inherit}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.input{border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img class="logo" src="./assets/logo.png" alt="logo">
+      <div>
+        <div style="font-weight:700;font-size:18px">Reports</div>
+        <div class="badge">Daily income summary</div>
+      </div>
+    </div>
+    <a class="btn" href="./index.html">Home</a>
+  </div>
+
+  <!-- KPIs -->
+  <div class="card">
+    <div class="grid">
+      <div class="kpi">
+        <h4>Consultations (eligible)</h4>
+        <div class="v" id="k_consultCount">—</div>
+        <div class="sub">New today + returns after 7 days</div>
+      </div>
+      <div class="kpi">
+        <h4>Consultation Fees</h4>
+        <div class="v" id="k_consultFees">₹0</div>
+        <div class="sub"><span id="feeNote">₹300</span> × eligible consultations</div>
+      </div>
+      <div class="kpi">
+        <h4>Lab Income (Today)</h4>
+        <div class="v" id="k_lab">₹0</div>
+        <div class="sub">from OPD Live “Send to Lab”</div>
+      </div>
+      <div class="kpi">
+        <h4>Pharmacy Sales (Today)</h4>
+        <div class="v" id="k_sales">₹0</div>
+        <div class="sub">from <code>pharma_sales_json</code></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Total + tools -->
+  <div class="card" style="background:#E8F6ED">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div class="toolbar">
+        <div style="font-weight:900;font-size:18px">Overall Income (Today)</div>
+        <button class="btn" id="btnRefresh">Refresh</button>
+        <button class="btn" id="btnCSV">Export Consults CSV</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <label for="fee" style="font-size:12px;color:#64748b">Consult fee</label>
+          <input id="fee" class="input" type="number" min="0" step="1" style="width:100px">
+          <button class="btn" id="btnFee">Save Fee</button>
+        </div>
+      </div>
+      <div style="font-weight:900;font-size:26px;color:#0f5132" id="k_total">₹0</div>
+    </div>
+  </div>
+
+  <!-- Detail (read-only snapshot) -->
+  <div class="card">
+    <h3 style="margin:0 0 8px">Today’s Consultations (eligible)</h3>
+    <table class="table" id="tbl_consults">
+      <thead><tr><th>Time</th><th>PID</th><th>Name</th><th>Token</th><th>Channel</th><th>Status</th><th>Reason</th><th>Eligible?</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/* ---------- Utils ---------- */
+const INR = n => '₹' + (Number(n||0)).toFixed(2);
+const todayISO = () => new Date().toISOString().slice(0,10);
+const startOfToday = () => { const d=new Date(); d.setHours(0,0,0,0); return d; };
+const endOfToday   = () => { const d=new Date(); d.setHours(23,59,59,999); return d; };
+
+function readJSON(key, fallback){
+  try{ const v = JSON.parse(localStorage.getItem(key)||'null'); return (v==null?fallback:v); }catch{ return fallback; }
+}
+
+/* ---------- Fee config ---------- */
+function getConsultFee(){
+  // priority: CONFIG.consultFee → localStorage.consult_fee → 300
+  const cfg = (window.CONFIG && typeof window.CONFIG.consultFee==='number') ? window.CONFIG.consultFee : null;
+  if(cfg!=null) return cfg;
+  const ls = Number(localStorage.getItem('consult_fee')||'');
+  return Number.isFinite(ls) && ls>=0 ? ls : 300;
+}
+function setConsultFee(v){
+  const n = Number(v); if(!Number.isFinite(n) || n<0) return;
+  localStorage.setItem('consult_fee', String(n));
+}
+
+/* ---------- Dexie (bookings) ---------- */
+async function openDB(){
+  const db=new Dexie('clinicdb');
+  db.version(1).stores({patients:'pid,patientName,contact,dob',bookings:'++id,date,ts,pid,token,status'});
+  try{ await db.open(); }catch{}
+  return db;
+}
+
+/* Load today's bookings */
+async function listBookingsToday(){
+  if (window.DB?.listBookingsToday) {
+    try {
+      const rows = await DB.listBookingsToday() || [];
+      return rows.filter(r=>(r.date||'')===todayISO()).sort((a,b)=>(a.ts||0)-(b.ts||0));
+    } catch {}
+  }
+  const db = await openDB();
+  try{
+    const iso = todayISO();
+    const rows = await db.table('bookings').where('date').equals(iso).toArray();
+    return rows.sort((a,b)=>(a.ts||0)-(b.ts||0));
+  }catch{ return []; }
+  finally{ try{db.close()}catch{} }
+}
+
+/* Last visit before today for a PID */
+async function lastVisitBeforeToday(pid){
+  const db = await openDB();
+  try{
+    const iso = todayISO();
+    const all = await db.table('bookings').where('pid').equals(pid).toArray();
+    const prev = all.filter(r => (r.date||'') < iso).sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
+    return prev ? new Date(prev.date + 'T00:00:00') : null;
+  }catch{ return null; }
+  finally{ try{db.close()}catch{} }
+}
+
+/* Eligibility: first ever today OR last visit >= 7 days ago */
+async function markEligibility(rows){
+  const startMinus7 = new Date(startOfToday().getTime() - 7*24*60*60*1000);
+  const byPID = {};
+  for(const r of rows){
+    if(byPID[r.pid]) continue;
+    const last = await lastVisitBeforeToday(r.pid);
+    const eligible = (!last) || (last <= startMinus7);
+    byPID[r.pid] = eligible;
+  }
+  return rows.map(r => ({...r, _eligible: byPID[r.pid]===true}));
+}
+
+/* Lab income — ONLY from OPD Live 'Send to Lab' (lab_orders_queue) */
+function labIncomeToday(){
+  let sum = 0;
+  try{
+    const arr = readJSON('lab_orders_queue', []);
+    if(Array.isArray(arr)){
+      const t0 = startOfToday().getTime(), t1=endOfToday().getTime();
+      for(const order of arr){
+        const ts = Number(order?.ts || 0);
+        if(!ts || ts<t0 || ts>t1) continue;
+        if(typeof order.total === 'number'){ sum += order.total; continue; }
+        let s = 0;
+        (order.items||[]).forEach(it=>{
+          const p = Number(it.price || 0), q = Number(it.qty || 1);
+          s += p*q;
+        });
+        sum += s;
+      }
+    }
+  }catch{}
+  return sum;
+}
+
+/* Pharmacy sales (today) */
+function pharmacySalesToday(){
+  let sum = 0;
+  try{
+    const arr = readJSON('pharma_sales_json', []);
+    if(Array.isArray(arr)){
+      const iso = todayISO(), t0=startOfToday().getTime(), t1=endOfToday().getTime();
+      for(const rec of arr){
+        const d = rec?.date;
+        if(typeof d === 'string' && d.startsWith(iso)){
+          sum += Number(rec.total || 0);
+        }else if(rec?.ts){
+          const ts = +rec.ts;
+          if(ts>=t0 && ts<=t1){ sum += Number(rec.total || 0); }
+        }
+      }
+    }
+  }catch{}
+  return sum;
+}
+
+/* ---------- CSV export ---------- */
+function exportConsultCSV(rows){
+  const header = ['Time','PID','Name','Token','Channel','Status','Reason','Eligible'];
+  const lines = [header.join(',')];
+  rows.forEach(r=>{
+    const t = r.ts ? new Date(r.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+    const cols = [t,r.pid||'',r.patientName||'',r.token||'',r.channel||'',r.status||'',r.reason||'', (r._eligible?'Yes':'No')];
+    lines.push(cols.map(x=>String(x).replaceAll('"','""')).map(x=>`"${x}"`).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `consults_${todayISO()}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------- Render ---------- */
+let _lastAnnotated = [];
+
+async function run(){
+  const fee = getConsultFee();
+  const rows = await listBookingsToday();
+  const ann = await markEligibility(rows);
+  _lastAnnotated = ann.slice();
+
+  const eligiblePIDs = new Set(ann.filter(r=>r._eligible).map(r=>r.pid));
+  const consultCount = eligiblePIDs.size;
+  const consultFees = consultCount * fee;
+
+  const lab = labIncomeToday();
+  const sales = pharmacySalesToday();
+  const total = consultFees + lab + sales;
+
+  document.getElementById('k_consultCount').textContent = String(consultCount);
+  document.getElementById('k_consultFees').textContent  = INR(consultFees);
+  document.getElementById('feeNote').textContent        = INR(fee);
+  document.getElementById('k_lab').textContent          = INR(lab);
+  document.getElementById('k_sales').textContent        = INR(sales);
+  document.getElementById('k_total').textContent        = INR(total);
+
+  const tb = document.querySelector('#tbl_consults tbody');
+  tb.innerHTML = '';
+  ann.forEach(r=>{
+    const t = r.ts ? new Date(r.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${t}</td><td>${r.pid||''}</td><td>${r.patientName||''}</td><td>${r.token||''}</td><td>${r.channel||''}</td><td>${r.status||''}</td><td>${r.reason||''}</td><td>${r._eligible?'Yes':'No'}</td>`;
+    tb.appendChild(tr);
+  });
+
+  // keep fee input in sync
+  const feeInput = document.getElementById('fee');
+  if(document.activeElement !== feeInput){
+    feeInput.value = String(fee);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  // init fee input
+  document.getElementById('fee').value = String(getConsultFee());
+  document.getElementById('btnFee').addEventListener('click', ()=>{
+    const v = Number(document.getElementById('fee').value||'0');
+    setConsultFee(v);
+    run();
+  });
+
+  document.getElementById('btnRefresh').addEventListener('click', run);
+  document.getElementById('btnCSV').addEventListener('click', ()=> exportConsultCSV(_lastAnnotated));
+
+  run();
+  setInterval(run, 12000);
+});
+</script>
+</body>
+</html>

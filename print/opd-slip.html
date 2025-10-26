@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OPD Slip · A4</title>
+
+<!-- Uses the same tokens as the app -->
+<link rel="stylesheet" href="../styles/styles.css"/>
+
+<!-- QR (local first, then CDN fallback) -->
+<script src="../scripts/qrcode.min.js"></script>
+<script>if(!window.QRCode){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';document.head.appendChild(s);}</script>
+
+<style>
+/* A4 layout */
+:root{ --line:#e5e7eb; --fg:#0f172a; }
+body{ font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Arial; color:var(--fg); }
+.page{ width:210mm; min-height:297mm; margin:0 auto; background:#fff; }
+.pad{ padding:14mm 16mm; }
+.head{ display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+.logo{ height:42px; }
+.hinfo{ font-size:12px; color:#475569; }
+.banner{ margin:8px 0 10px; }
+.banner img{ width:100%; max-height:calc(var(--banner-h,160px) - 40px); object-fit:contain; opacity:.96; mix-blend-mode:multiply; }
+
+.cols{ display:grid; grid-template-columns:1.1fr .9fr; gap:12px; margin-top:10px; }
+.box{ border:1px solid var(--line); border-radius:8px; padding:10px; }
+.box h4{ margin:0 0 6px; font-size:13px; }
+.kv{ display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; }
+.row{ display:flex; gap:8px; flex-wrap:wrap; }
+.slab{ padding:8px 10px; border:1px dashed var(--line); border-radius:8px; margin-top:8px; }
+table{ width:100%; border-collapse:collapse; font-size:12px; }
+th,td{ border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+th{ background:#f8fafc; }
+
+.foot{ display:flex; justify-content:space-between; align-items:flex-end; gap:14px; margin-top:14px; border-top:1px solid var(--line); padding-top:8px; }
+.qr{ width:110px; height:110px; border:1px dashed var(--line); border-radius:10px; display:grid; place-items:center; }
+.muted{ color:#64748b; }
+.actions{ display:flex; gap:8px; position:sticky; top:6px; background:#fff; padding:6px 0; }
+
+@media print {
+  @page { size: A4 portrait; margin: 10mm; }
+  .actions{ display:none; }
+  .page{ box-shadow:none; }
+}
+</style>
+</head>
+<body class="bg">
+<div class="actions pad" style="max-width:210mm;margin:0 auto;">
+  <button id="btnPrint" class="btn primary">Print (A4)</button>
+  <button id="btnWA" class="btn">Share on WhatsApp</button>
+</div>
+
+<div class="page">
+  <div class="pad">
+    <!-- Header -->
+    <div class="head">
+      <div class="row" style="align-items:center">
+        <img id="logo" class="logo" src="../assets/logo.png" alt="logo">
+        <div>
+          <div id="clinic" style="font-weight:800;font-size:18px">Clinic</div>
+          <div id="addr" class="hinfo"></div>
+        </div>
+      </div>
+      <div class="hinfo" id="hdrMeta">—</div>
+    </div>
+
+    <!-- Banner (auto fit) -->
+    <div class="banner"><img id="banner" src="../assets/banner.png" alt="Clinic Banner"></div>
+
+    <!-- Identity + Vitals -->
+    <div class="cols">
+      <div class="box">
+        <h4>Patient</h4>
+        <div class="kv">
+          <div><b>Name:</b> <span id="p_name">—</span></div>
+          <div><b>Phone:</b> <span id="p_phone">—</span></div>
+          <div><b>PID:</b> <span id="p_pid">—</span></div>
+          <div><b>Token:</b> <span id="p_tok">—</span></div>
+          <div><b>Age:</b> <span id="p_age">—</span></div>
+          <div><b>Gender:</b> <span id="p_gender">—</span></div>
+        </div>
+        <div class="slab muted" style="margin-top:8px">VALID UPTO (visit + 7 days) WITH ONE FREE REVIEW.</div>
+      </div>
+
+      <div class="box">
+        <h4>Vitals</h4>
+        <div class="kv">
+          <div><b>Height:</b> <span id="v_ht">—</span></div>
+          <div><b>Weight:</b> <span id="v_wt">—</span></div>
+          <div><b>Temp:</b> <span id="v_temp">—</span></div>
+          <div><b>Pulse:</b> <span id="v_pulse">—</span></div>
+          <div><b>SpO₂:</b> <span id="v_spo2">—</span></div>
+          <div><b>Verdict:</b> <span id="v_verdict">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="box" style="margin-top:12px">
+      <div class="row" style="gap:12px">
+        <div style="flex:1">
+          <h4>Chief Complaints</h4>
+          <div id="n_cc" class="slab">—</div>
+        </div>
+        <div style="flex:1">
+          <h4>Diagnosis</h4>
+          <div id="n_dx" class="slab">—</div>
+        </div>
+        <div style="flex:1">
+          <h4>Plan / Advice</h4>
+          <div id="n_plan" class="slab">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rx -->
+    <div class="box" style="margin-top:12px">
+      <h4>Prescription</h4>
+      <table id="rxTbl"><thead>
+        <tr><th style="width:36%">Drug</th><th style="width:14%">Dose</th><th style="width:14%">Freq</th><th style="width:12%">Days</th><th>Notes</th></tr>
+      </thead><tbody></tbody></table>
+    </div>
+
+    <!-- Lab -->
+    <div class="box" style="margin-top:12px">
+      <h4>Lab Orders</h4>
+      <table id="labTbl"><thead>
+        <tr><th style="width:62%">Test</th><th>Notes</th></tr>
+      </thead><tbody></tbody></table>
+    </div>
+
+    <!-- Footer -->
+    <div class="foot">
+      <div class="muted">
+        <div id="footerNote">Please arrive on time for your next visit. For assistance, reply to our WhatsApp message.</div>
+        <div id="nextVisitLine" class="muted"></div>
+      </div>
+      <div class="qr" id="qrBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const todayISO=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
+function ageText(d){ if(!d) return ''; const a=new Date(d),b=new Date(); let y=b.getFullYear()-a.getFullYear(),m=b.getMonth()-a.getMonth(),dd=b.getDate()-a.getDate(); if(dd<0){m--; dd+=new Date(b.getFullYear(),b.getMonth(),0).getDate();} if(m<0){y--; m+=12;} return `${y}y ${m}m ${dd}d`; }
+function esc(s){return String(s??'').replace(/[&<>]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
+
+/* Branding/theme pulled from settings */
+function loadBranding(){
+  let b=null; try{ b = JSON.parse(localStorage.getItem('branding_json')||'null'); }catch{}
+  const clinic = b?.clinicName || 'Your Clinic';
+  const addr = (b?.address||'').replace(/\n/g,' · ');
+  $('#clinic').textContent = clinic;
+  $('#addr').textContent = addr;
+  $('#logo').src = b?.logoUrl || '../assets/logo.png';
+  $('#banner').src = b?.bannerUrl || '../assets/banner.png';
+  const h = (b?.bannerSize==='s')?120:(b?.bannerSize==='l')?220:160;
+  document.documentElement.style.setProperty('--banner-h', h+'px');
+  document.documentElement.dataset.theme = b?.theme || 'pastel';
+}
+
+/* Read payload (?data=) or last_encounter */
+function getPayload(){
+  const q=new URLSearchParams(location.search);
+  const raw=q.get('data');
+  if(raw){ try{ return JSON.parse(decodeURIComponent(raw)); }catch{} }
+  try{ return JSON.parse(localStorage.getItem('last_encounter')||'null') || {}; }catch{ return {}; }
+}
+
+/* Fill page */
+function fill(d){
+  const pid=d.pid||d.identity?.pid||'';
+  const tok=(d.tokenRef||'').split('-')[1] || '';
+  const dt=d.date || todayISO();
+  $('#hdrMeta').textContent = `Date ${dt}`;
+  $('#p_name').textContent = d.identity?.name || '—';
+  $('#p_phone').textContent = d.identity?.phone || '—';
+  $('#p_pid').textContent = pid || '—';
+  $('#p_tok').textContent = tok || '—';
+  $('#p_gender').textContent = d.identity?.gender || '—';
+  $('#p_age').textContent = d.identity?.dob ? ageText(d.identity.dob) : '—';
+
+  $('#v_ht').textContent = d.vitals?.height || '—';
+  $('#v_wt').textContent = d.vitals?.weight || '—';
+  $('#v_temp').textContent = d.vitals?.temp || '—';
+  $('#v_pulse').textContent = d.vitals?.pulse || '—';
+  $('#v_spo2').textContent = d.vitals?.spo2 || '—';
+  $('#v_verdict').textContent = d.vitals?.verdict || '—';
+
+  $('#n_cc').textContent   = d.notes?.complaints || '—';
+  $('#n_dx').textContent   = d.notes?.diagnosis  || '—';
+  $('#n_plan').textContent = d.notes?.plan       || '—';
+
+  const rxTB = $('#rxTbl tbody'); rxTB.innerHTML='';
+  (d.rx||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${esc(r.drug||'')}</td><td>${esc(r.dose||'')}</td><td>${esc(r.freq||'')}</td><td>${esc(r.days||'')}</td><td>${esc(r.notes||'')}</td>`;
+    rxTB.appendChild(tr);
+  });
+
+  const labTB = $('#labTbl tbody'); labTB.innerHTML='';
+  (d.lab||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${esc(r.test||'')}</td><td>${esc(r.notes||'')}</td>`;
+    labTB.appendChild(tr);
+  });
+
+  // QR: PID|TOKEN
+  const qr = `${pid||''}|${tok||''}`;
+  const box=$('#qrBox'); box.innerHTML='';
+  if(window.QRCode && qr.includes('|')) new QRCode(box,{text:qr,width:100,height:100,correctLevel:QRCode.CorrectLevel.M});
+
+  // Next visit (if any)
+  if(d.identity?.nextVisit){ $('#nextVisitLine').textContent = `Next visit on ${d.identity.nextVisit}`; }
+}
+
+/* WhatsApp */
+function buildWA(d){
+  const clinic = document.getElementById('clinic').textContent || 'Your Clinic';
+  const nm=d.identity?.name||'Patient', pid=d.pid||'', tok=(d.tokenRef||'').split('-')[1]||'';
+  const dt=d.date||todayISO();
+  const lines=[
+    `Hello from ${clinic}.`,
+    `Consultation summary for ${nm} (PID ${pid}).`,
+    `Token #${tok} · Date ${dt}.`,
+    `Chief complaints: ${(d.notes?.complaints||'—').replace(/\n/g,' ')}`,
+    `Diagnosis: ${(d.notes?.diagnosis||'—').replace(/\n/g,' ')}`,
+    `Plan: ${(d.notes?.plan||'—').replace(/\n/g,' ')}`,
+    `Valid up to 7 days with ONE free review.`
+  ];
+  return encodeURIComponent(lines.join('\n'));
+}
+function sendWA(d){
+  const ph=(d.identity?.phone||'').replace(/\D/g,'');
+  if(!/^\d{10}$/.test(ph)) return alert('Invalid phone for WhatsApp');
+  window.open(`https://wa.me/91${ph}?text=${buildWA(d)}`,'_blank');
+}
+
+/* Boot */
+document.addEventListener('DOMContentLoaded', ()=>{
+  loadBranding();
+  const data = getPayload();
+  fill(data);
+  document.getElementById('btnPrint').onclick = ()=>window.print();
+  document.getElementById('btnWA').onclick = ()=>sendWA(data);
+});
+</script>
+</body>
+</html>

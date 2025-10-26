@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script src="./config/config.js"></script>
+  <script src="./scripts/db.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Doctor Dashboard · Clinic PWA</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <style>
+    /* ---- Locked pastel theme (do not change) ---- */
+    :root{
+      --bg-gradient:linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+      --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --teal:#C8F5E4; --pink:#FBD6E3; --amber:#FFE9B3;
+      --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+      --r:16px; --shadow:0 6px 18px rgba(0,0,0,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui;background:var(--bg-gradient);color:var(--ink)}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+
+    /* Header (locked colours) */
+    .header{
+      display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+      background:rgba(214,229,221,.8); /* mint tint */
+      border:1px solid #0001;border-radius:12px;margin-top:10px;box-shadow:var(--shadow);
+      backdrop-filter:saturate(120%) blur(2px);
+    }
+    .header .logo{height:40px}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:600;cursor:pointer}
+    .btn:hover{background:#f1f5f9}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+
+    /* Banner (locked lavender) */
+    .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:var(--lav)}
+    .banner img{width:100%;transform:scale(.65);transform-origin:center;border-radius:var(--r);display:block;mix-blend-mode:multiply;opacity:.95}
+
+    /* Cards */
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+    .tile{border-radius:var(--r);padding:16px;box-shadow:var(--shadow);border:1px solid #0000000d}
+    .tile h3{margin:6px 0 4px}
+    .tile p{margin:0;color:var(--muted);font-size:13px}
+    .badge{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+
+    .t-opd{background:var(--mint)}
+    .t-book{background:var(--peach)}
+    .t-lab{background:var(--lav)}
+    .t-pharm{background:var(--teal)}
+    .t-anal{background:#FBD6E3}
+
+    /* KPIs */
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .kpi{border:1px solid #e2e8f0;border-radius:14px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+    .kpi .label{font-size:12px;color:var(--muted)}
+    .kpi .num{font-size:22px;font-weight:900;margin-top:6px}
+    .kpi.mint{background:var(--mint)}
+    .kpi.peach{background:var(--peach)}
+    .kpi.teal{background:var(--teal)}
+    .kpi.pink{background:var(--pink)}
+
+    /* Table */
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+    th{background:#f8fafc;position:sticky;top:0;z-index:1}
+    .right{text-align:right}
+
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .input{border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px}
+    .pill{display:inline-block;border-radius:999px;padding:4px 10px;background:#f1f5f9;border:1px solid #e5e7eb;font-size:12px}
+
+    /* Footer */
+    .footer{text-align:center;padding:16px 4px;font-size:13px;color:var(--muted);margin:22px 0 14px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <img class="logo" src="./assets/logo.png" alt="logo">
+    <div>
+      <div style="font-weight:900;font-size:18px">Doctor Dashboard</div>
+      <div class="small" style="color:#475569">Today’s OPD · Bookings · Lab</div>
+    </div>
+    <div class="row">
+      <a class="btn" href="./opd-live.html">OPD</a>
+      <a class="btn" href="./bookings.html">Bookings</a>
+      <a class="btn" href="./lab-hub.html">Lab</a>
+    </div>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner"><img src="./assets/banner.png" alt="Clinic Banner"></div>
+
+  <!-- Colourful module cards (replaces quick links) -->
+  <div class="grid">
+    <a class="tile t-opd" href="./opd-live.html">
+      <div class="badge">Live</div>
+      <h3>OPD</h3>
+      <p>Start/continue consultations.</p>
+    </a>
+    <a class="tile t-book" href="./bookings.html">
+      <div class="badge">Queue</div>
+      <h3>Bookings</h3>
+      <p>View & manage today’s list.</p>
+    </a>
+    <a class="tile t-lab" href="./lab-hub.html">
+      <div class="badge">Tests</div>
+      <h3>Lab Hub</h3>
+      <p>Orders, results, and follow-ups.</p>
+    </a>
+    <a class="tile t-pharm" href="./pharmacy.html">
+      <div class="badge">FEFO</div>
+      <h3>Pharmacy</h3>
+      <p>Inventory, POS, GST & returns.</p>
+    </a>
+    <a class="tile t-anal" href="./analytics.html">
+      <div class="badge">Reports</div>
+      <h3>Analytics</h3>
+      <p>Sales, purchases, profit, expiry.</p>
+    </a>
+  </div>
+
+  <!-- KPIs -->
+  <div class="card">
+    <div class="kpis">
+      <div class="kpi mint">
+        <div class="label">Bookings Today</div>
+        <div class="num" id="k_book">—</div>
+      </div>
+      <div class="kpi teal">
+        <div class="label">Waiting</div>
+        <div class="num" id="k_wait">—</div>
+      </div>
+      <div class="kpi peach">
+        <div class="label">Consulted</div>
+        <div class="num" id="k_done">—</div>
+      </div>
+      <div class="kpi pink">
+        <div class="label">Labs Pending</div>
+        <div class="num" id="k_labs">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Today’s OPD -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <b>Today’s OPD</b>
+      <div class="row">
+        <input id="q" class="input" placeholder="Search by PID / name / phone">
+        <span class="pill">Today: <span id="todayLbl">—</span></span>
+        <span class="badge" id="count">—</span>
+      </div>
+    </div>
+    <div style="overflow:auto;max-height:56vh;margin-top:8px">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Time</th><th>PID</th><th>Name</th><th>Phone</th><th>Dept</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/* ---------- Helpers ---------- */
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+document.getElementById('todayLbl').textContent = todayISO();
+
+async function openDB(){
+  try{ const db = new Dexie('clinicdb'); await db.open(); return db; }
+  catch(e){ console.warn('Dexie open failed', e); return null; }
+}
+
+/* Load bookings for today from Dexie (defensive fields) */
+async function loadTodayBookings(){
+  const db = await openDB(); if(!db) return [];
+  const names = db.tables.map(t=>t.name);
+  if(!names.includes('bookings')){ await db.close(); return []; }
+  const t = todayISO();
+  let rows = await db.table('bookings').where('date').equals(t).toArray();
+  await db.close().catch(()=>{});
+  rows = rows.map(r=>({
+    time:  r.time || r.slot || '',
+    pid:   r.pid || r.PID || r.pidNo || '',
+    name:  r.name || r.patientName || '',
+    phone: r.phone || r.mobile || r.contact || '',
+    dept:  r.dept || r.department || '',
+    status:r.status || 'Waiting'
+  }));
+  rows.sort((a,b)=> (String(a.time||'').localeCompare(String(b.time||''))) || String(a.name||'').localeCompare(String(b.name||'')));
+  return rows;
+}
+
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderTable(rows){
+  const tb=document.querySelector('#tbl tbody'); tb.innerHTML='';
+  rows.forEach(r=>{
+    const q = encodeURIComponent(r.pid||'');
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${esc(r.time||'-')}</td>
+      <td>${esc(r.pid||'-')}</td>
+      <td>${esc(r.name||'-')}</td>
+      <td>${esc(r.phone||'-')}</td>
+      <td>${esc(r.dept||'-')}</td>
+      <td>${esc(r.status||'Waiting')}</td>
+      <td><a class="btn" href="./opd-live.html${q?`?pid=${q}`:''}">Start</a></td>`;
+    tb.appendChild(tr);
+  });
+  document.getElementById('count').textContent = rows.length;
+}
+
+/* KPIs */
+function calcKPIs(rows){
+  const total = rows.length;
+  const done  = rows.filter(r=> /done|consult|complete/i.test(r.status||'')).length;
+  const wait  = total - done;
+  let labs=0; try{
+    const q = JSON.parse(localStorage.getItem('lab_orders_queue')||'[]');
+    if(Array.isArray(q)){
+      const today = todayISO();
+      labs = q.filter(x=> (x.date||'').slice(0,10)===today).length;
+    }
+  }catch{}
+  document.getElementById('k_book').textContent = total;
+  document.getElementById('k_wait').textContent = wait;
+  document.getElementById('k_done').textContent = done;
+  document.getElementById('k_labs').textContent = labs;
+}
+
+/* Search */
+let ALL=[];
+function wireSearch(){
+  const qEl=document.getElementById('q');
+  qEl.addEventListener('input', ()=>{
+    const q=(qEl.value||'').trim().toLowerCase();
+    if(!q) return renderTable(ALL);
+    const out = ALL.filter(r=>
+      (r.pid||'').toLowerCase().includes(q) ||
+      (r.name||'').toLowerCase().includes(q) ||
+      (r.phone||'').toLowerCase().includes(q)
+    );
+    renderTable(out);
+  });
+}
+
+/* Refresh */
+async function refresh(){
+  ALL = await loadTodayBookings();
+  renderTable(ALL);
+  calcKPIs(ALL);
+}
+document.addEventListener('DOMContentLoaded', async ()=>{
+  wireSearch();
+  await refresh();
+  setInterval(refresh, 30000);
+});
+</script>
+
+<!-- Engines -->
+<script src="/scripts/qrcode.min.js?v=1.1"></script>
+<script src="/scripts/barcode.js?v=8.4.6"></script>
+<script src="/scripts/seed-and-diagnostics.js?v=1.2"></script>
+</body>
+</html>

@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Sales · Pharmacy · Clinic PWA</title>
+
+  <!-- Dexie BEFORE db.js -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <script src="./scripts/db.js"></script>
+
+  <link rel="manifest" href="./manifest.json"/>
+
+  <style>
+    :root{
+      /* Theme defaults (branding overrides) */
+      --bg-gradient:linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+      --card:#fff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+      --mint:#E8F6ED; --lav:#EEF2FF; --peach:#FFF9F3;
+      --r:16px; --shadow:0 6px 18px rgba(0,0,0,.08);
+      --banner-h:150px; --banner-fit:contain;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:14px/1.45 system-ui;background:var(--bg-gradient);color:var(--ink)}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1220px;margin:0 auto;padding:8px 10px 18px}
+
+    /* Desktop-first bar */
+    .topbar{margin-top:10px;border-radius:16px;overflow:hidden;box-shadow:var(--shadow);background:var(--lav);border:1px solid #e5e7eb}
+    .toprow{display:flex;align-items:center;gap:12px;padding:10px 12px}
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand img{height:40px}
+    .brand .title{font-weight:800;font-size:18px}
+    .brand .sub{font-size:12px;color:var(--muted)}
+    .links{margin-left:auto;display:flex;gap:8px}
+    .btn{background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:7px 14px;font-weight:700;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border:none}
+    .btn.ghost{background:transparent}
+
+    .banner{position:relative;overflow:hidden;border-radius:16px;margin:10px 0;background:#F1F5F9;border:1px solid #e5e7eb;
+      height:var(--banner-h);display:flex;align-items:center;justify-content:center}
+    .banner img{width:100%;max-height:calc(var(--banner-h) - 6px);object-fit:var(--banner-fit);transform-origin:center;opacity:.95;mix-blend-mode:multiply;display:block}
+
+    /* Desktop-first wide card */
+    .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+    .row{display:flex;flex-wrap:wrap;gap:10px}
+    .input{border:1px solid #cbd5e1;border-radius:10px;padding:9px 10px;width:100%}
+    .table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+    .table th,.table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;vertical-align:middle}
+    .table th{background:#f1f5f9}
+    .right{display:flex;gap:8px;justify-content:flex-end}
+    .note{font-size:12px;color:#475569}
+    .pill{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:5px 10px;font-size:12px}
+    .badge{display:inline-flex;align-items:center;gap:6px;border:1px solid #e2e8f0;border-radius:999px;padding:4px 8px;font-size:11px;background:#fff}
+    .badge.warn{background:#FFF7ED;border-color:#fed7aa}
+    .hint{font-size:12px;color:#64748b}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:6px;padding:1px 6px;background:#fff}
+    .totals{display:grid;grid-template-columns:repeat(4, minmax(120px,1fr));gap:8px}
+    .totals .box{border:1px solid #e5e7eb;border-radius:12px;padding:10px;background:#fff}
+    .totals .box h4{margin:0 0 6px;font-size:13px;color:#334155}
+    .totals .val{font-weight:800;font-size:16px}
+    .footer{text-align:center;padding:18px 4px 22px;font-size:13px;color:var(--muted);margin:16px 0}
+
+    @media (max-width:900px){
+      .totals{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media print{
+      body{background:#fff;color:#000}
+      .wrap{display:none}
+      #printArea{display:block;padding:6mm}
+    }
+    #printArea{display:none}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="toprow">
+      <div class="brand">
+        <img id="hdrLogo" class="logo" src="./assets/logo.png" alt="logo">
+        <div>
+          <div class="title">Sales (POS)</div>
+          <div class="sub">Desktop-friendly · FEFO · GST on screen · WA bill</div>
+        </div>
+      </div>
+      <div class="links">
+        <a class="btn" href="./pharmacy.html">Pharmacy</a>
+        <a class="btn" href="./index.html">Home</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner"><img id="hdrBanner" src="./assets/banner.png" alt="Clinic Banner"></div>
+
+  <!-- Wide Sale Builder -->
+  <div class="card" style="background:#D6E5DD">
+    <div class="row" style="align-items:end">
+      <div style="flex:1 1 280px">
+        <label>Buyer / PID</label>
+        <input id="buyer" class="input" placeholder="Walk-in / auto-filled from OPD">
+      </div>
+
+      <div style="flex:2 1 360px">
+        <label>Product (name | barcode)</label>
+        <input id="pname" class="input" list="plist" placeholder="Type or scan…" autocomplete="off">
+        <datalist id="plist"></datalist>
+        <div class="hint">Shortcuts: <span class="kbd">Enter</span> add · <span class="kbd">Ctrl+D</span> discount · <span class="kbd">Ctrl+S</span> save · <span class="kbd">Ctrl+P</span> print · <span class="kbd">Ctrl+W</span> WhatsApp</div>
+      </div>
+
+      <div style="flex:0 0 110px">
+        <label>Qty</label>
+        <input id="pqty" class="input" type="number" min="1" value="1" inputmode="numeric">
+      </div>
+
+      <div style="flex:1 1 320px">
+        <label>Payment</label>
+        <div class="row">
+          <select id="payMode" class="input" style="flex:1">
+            <option>Cash</option><option>UPI</option><option>Card</option><option>Wallet</option>
+          </select>
+          <input id="payRef" class="input" style="flex:1" placeholder="Ref / Txn (optional)">
+        </div>
+      </div>
+
+      <div class="row" style="flex:0 0 320px;align-items:end;justify-content:flex-end">
+        <span id="rxBadge" class="badge" title="OPD prescriptions pending" style="display:none">Import Rx: <b id="rxCount">0</b></span>
+        <label class="badge" style="cursor:pointer"><input id="autoImport" type="checkbox" style="accent-color:var(--primary)"> Auto-import</label>
+        <button class="btn" id="btnImportRx">Import Rx</button>
+        <button class="btn primary" id="btnAdd">Add Item</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="background:var(--peach)">
+    <table class="table" id="saleTable">
+      <thead>
+        <tr>
+          <th style="width:42px">#</th>
+          <th style="min-width:240px">Product</th>
+          <th>Pack</th>
+          <th>Batch</th>
+          <th>EXP</th>
+          <th style="width:80px">HSN</th>
+          <th style="width:80px">Qty</th>
+          <th style="width:100px">MRP</th>
+          <th style="width:110px">Amount</th>
+          <th style="width:40px"></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <!-- Totals -->
+    <div class="totals" style="margin-top:12px">
+      <div class="box">
+        <h4>Subtotal</h4>
+        <div class="val" id="subTotal">0.00</div>
+      </div>
+      <div class="box">
+        <h4>Discount (%)</h4>
+        <input id="disc" class="input" type="number" value="0" min="0" max="95" step="0.5">
+      </div>
+      <div class="box">
+        <h4>SGST 2.5% + CGST 2.5%</h4>
+        <div class="val">SGST: <span id="sgst">0.00</span> · CGST: <span id="cgst">0.00</span></div>
+      </div>
+      <div class="box">
+        <h4>Net Total</h4>
+        <div class="val" id="netTotal">0.00</div>
+      </div>
+    </div>
+
+    <div class="right" style="margin-top:12px">
+      <button class="btn" id="btnClear">Clear</button>
+      <button class="btn" id="btnPrint">🖨️ Print A5 Bill</button>
+      <button class="btn" id="btnWA">🟢 WhatsApp Bill</button>
+      <button class="btn primary" id="btnSave">💾 Save Invoice</button>
+    </div>
+    <div id="msg" class="hint" style="margin-top:6px"></div>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+/* -----------------------------------------------------------
+   Branding (same model as bookings/opd-live)
+----------------------------------------------------------- */
+const THEMES = {
+  pastel: {'--bg-gradient':'linear-gradient(145deg,#edf3f0,#ece9f6,#fff0e6)','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#17B26A','--mint':'#C8E3D2','--lav':'#D7CEF0','--peach':'#FFD8B8'},
+  glass:  {'--bg-gradient':'linear-gradient(135deg,#f8fafc,#eef2ff)','--card':'#ffffffcc','--ink':'#0f172a','--muted':'#475569','--primary':'#2563eb','--mint':'#e2e8f0','--lav':'#e9d5ff','--peach':'#ffedd5'},
+  neo:    {'--bg-gradient':'linear-gradient(135deg,#f3f4f6,#fafafa)','--card':'#ffffff','--ink':'#111827','--muted':'#6b7280','--primary':'#10b981','--mint':'#d1fae5','--lav':'#ede9fe','--peach':'#ffe4e6'},
+  iphone: {'--bg-gradient':'linear-gradient(180deg,#fdf2f8,#eff6ff)','--card':'#ffffff','--ink':'#0f172a','--muted':'#475569','--primary':'#0ea5e9','--mint':'#e0f2fe','--lav':'#e9d5ff','--peach':'#ffe4e6'}
+};
+function applyTheme(name){ const m=THEMES[name]||THEMES.pastel; Object.entries(m).forEach(([k,v])=>document.documentElement.style.setProperty(k,v)); }
+function applyBranding(b){
+  applyTheme(b?.theme||'pastel');
+  document.getElementById('hdrLogo').src   = b?.logoUrl   || './assets/logo.png';
+  document.getElementById('hdrBanner').src = b?.bannerUrl || './assets/banner.png';
+  document.documentElement.style.setProperty('--banner-h',  `${Number(b?.bannerH||150)}px`);
+  document.documentElement.style.setProperty('--banner-fit', b?.bannerFit||'contain');
+}
+function lsBrand(){ try{return JSON.parse(localStorage.getItem('branding_json')||'null')||null;}catch{return null;} }
+async function loadBranding(){
+  try{ await DB.open?.(); }catch{}
+  let b=null; try{ b=(await DB.settings?.get?.('branding'))?.val||null; }catch{}
+  if(!b) b=lsBrand();
+  applyBranding(b||{});
+}
+window.addEventListener('storage', e=>{ if(e.key==='branding_touch') loadBranding(); });
+
+/* -----------------------------------------------------------
+   DB / helpers
+----------------------------------------------------------- */
+const DB = window.DB || new Dexie('onesystem_clinic');
+if(!window.DB){ DB.version(1).stores({settings:'key',patients:'++id,pid,phone,name',bookings:'++id,date,pid,tokenNo',sales:'++id,date,source,mode',}); }
+const dbReady = DB.open?.() || Promise.resolve();
+
+const $ = s => document.querySelector(s);
+const money = n => (+n||0).toFixed(2);
+const msg  = (t)=> { const el=$('#msg'); if(el){ el.textContent=t; } };
+function readLS(k,f){ try{ return JSON.parse(localStorage.getItem(k)||'null') ?? f; }catch{ return f; } }
+function writeLS(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+const eqi=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();
+const toExp = mmYY => { const [m,y]=String(mmYY||'').split('/').map(n=>parseInt(n,10)); return new Date(2000+(y||0),((m||1)-1),1); };
+
+/* Stock + Bill state */
+let STOCK=[], SALE=[], LAST_SAVED=null;
+function loadStock(){ STOCK = readLS('pharma_stock_json', []); }
+function persistStock(){ writeLS('pharma_stock_json', STOCK); }
+
+/* -----------------------------------------------------------
+   Search / suggestions
+----------------------------------------------------------- */
+function suggest(){
+  const val = $('#pname').value.toLowerCase();
+  const list = $('#plist'); list.innerHTML='';
+  if(!val) return;
+  const hits = STOCK.filter(s=>{
+    const nm=(s.name||'').toLowerCase(); const bc=(s.barcode||'').toLowerCase();
+    return nm.includes(val) || bc.includes(val);
+  }).slice(0,15);
+  hits.forEach(s=>{
+    const o=document.createElement('option');
+    o.value = s.barcode || `${s.name}|${s.batch||''}`;
+    o.label = s.name + (s.batch? ` · ${s.batch}`:'');
+    list.appendChild(o);
+  });
+}
+$('#pname').addEventListener('input', suggest);
+
+/* -----------------------------------------------------------
+   FEFO pick and item ops
+----------------------------------------------------------- */
+function parseKey(input){
+  const txt=String(input||'').trim(); const parts=txt.split('|');
+  return { name:(parts[0]||'').trim(), batch:(parts[1]||'').trim() };
+}
+function addFromPool(pool, qty, hsn='3004'){
+  let need = +qty||0; if(need<=0) return false;
+  const picks=[]; const sorted = pool.slice().sort((a,b)=>toExp(a.exp)-toExp(b.exp));
+  for(const st of sorted){
+    if(need<=0) break;
+    const stockQty=+st.qty||0; if(stockQty<=0) continue;
+    const take=Math.min(stockQty, need);
+    st.qty = stockQty - take; // decrement
+    picks.push({ name:st.name, pack:st.pack||st.unit||'', batch:st.batch, exp:st.exp, hsn:hsn, qty:take, mrp:+st.mrp||0 });
+    need -= take;
+  }
+  if(need>0){
+    // rollback
+    picks.forEach(p=>{
+      const back=STOCK.find(s=>eqi(s.name,p.name)&&eqi(s.batch,p.batch)&&s.exp===p.exp);
+      if(back) back.qty=(+back.qty||0)+p.qty;
+    });
+    alert('Insufficient stock');
+    return false;
+  }
+  SALE.push(...picks); persistStock(); render(); return true;
+}
+function addItemManual(){
+  const raw=$('#pname').value.trim(); const qty=+($('#pqty').value||0)||1;
+  if(!raw) return;
+  const {name,batch}=parseKey(raw);
+  let pool = batch? STOCK.filter(s=>eqi(s.name,name)&&eqi(s.batch,batch)) : STOCK.filter(s=>eqi(s.name,name));
+  if(!pool.length){ alert('Not found'); return; }
+  addFromPool(pool, qty, '3004');
+  $('#pname').value=''; $('#pqty').value='1';
+}
+$('#btnAdd').addEventListener('click', addItemManual);
+
+/* remove / clear */
+function removeLine(ix){
+  const r=SALE[ix]; if(!r) return;
+  const back=STOCK.find(s=>eqi(s.name,r.name)&&eqi(s.batch,r.batch)&&s.exp===r.exp);
+  if(back){ back.qty=(+back.qty||0)+(+r.qty||0); persistStock(); }
+  SALE.splice(ix,1); render();
+}
+$('#btnClear').addEventListener('click', ()=>{
+  SALE.forEach(r=>{
+    const back=STOCK.find(s=>eqi(s.name,r.name)&&eqi(s.batch,r.batch)&&s.exp===r.exp);
+    if(back){ back.qty=(+back.qty||0)+(+r.qty||0); }
+  });
+  SALE=[]; persistStock(); render();
+});
+
+/* -----------------------------------------------------------
+   Totals (Discount before tax; SGST 2.5% + CGST 2.5%)
+----------------------------------------------------------- */
+const SGST_RATE=2.5, CGST_RATE=2.5;
+function recalc(){
+  const sub = SALE.reduce((s,r)=> s + (+r.qty||0)*(+r.mrp||0), 0);
+  $('#subTotal').textContent = money(sub);
+  const discPct = +($('#disc').value||0); const taxable = sub * (1 - (discPct/100));
+  const sgst = taxable * (SGST_RATE/100); const cgst = taxable * (CGST_RATE/100);
+  $('#sgst').textContent = money(sgst); $('#cgst').textContent = money(cgst);
+  $('#netTotal').textContent = money(taxable + sgst + cgst);
+}
+$('#disc').addEventListener('input', recalc);
+
+/* -----------------------------------------------------------
+   Render table
+----------------------------------------------------------- */
+function render(){
+  const tb = $('#saleTable tbody'); tb.innerHTML='';
+  SALE.forEach((r,i)=>{
+    const amt = (+r.qty||0) * (+r.mrp||0);
+    tb.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${i+1}</td>
+        <td><input class="input" value="${r.name||''}" oninput="editName(${i}, this.value)"></td>
+        <td><input class="input" value="${r.pack||''}" oninput="editPack(${i}, this.value)"></td>
+        <td><input class="input" value="${r.batch||''}" oninput="editBatch(${i}, this.value)"></td>
+        <td><input class="input" value="${r.exp||''}" oninput="editExp(${i}, this.value)"></td>
+        <td><input class="input" value="${r.hsn||'3004'}" oninput="editHSN(${i}, this.value)"></td>
+        <td><input class="input" type="number" min="1" value="${r.qty||1}" oninput="editQty(${i}, this.value)"></td>
+        <td><input class="input" type="number" step="0.01" min="0" value="${r.mrp||0}" oninput="editMRP(${i}, this.value)"></td>
+        <td>${money(amt)}</td>
+        <td><button class="btn" onclick="removeLine(${i})">×</button></td>
+      </tr>
+    `);
+  });
+  recalc();
+}
+window.editName=(i,v)=>{ SALE[i].name=v; render(); };
+window.editPack=(i,v)=>{ SALE[i].pack=v; render(); };
+window.editBatch=(i,v)=>{ SALE[i].batch=v; render(); };
+window.editExp =(i,v)=>{ SALE[i].exp=v; render(); };
+window.editHSN =(i,v)=>{ SALE[i].hsn=v||'3004'; render(); };
+window.editQty =(i,v)=>{ const newQ=+v||1; const diff=newQ-(+SALE[i].qty||0);
+  // Adjust stock live (simple: if increasing qty, try to consume same batch; if decreasing, return)
+  const back=STOCK.find(s=>eqi(s.name,SALE[i].name)&&eqi(s.batch,SALE[i].batch)&&s.exp===SALE[i].exp);
+  if(diff>0){
+    if(!back || (+back.qty||0)<diff){ alert('Insufficient stock'); return render(); }
+    back.qty=(+back.qty||0)-diff;
+  }else if(diff<0){
+    if(back) back.qty=(+back.qty||0)+(-diff);
+  }
+  SALE[i].qty=newQ; persistStock(); render();
+};
+window.editMRP =(i,v)=>{ SALE[i].mrp=+v||0; render(); };
+
+/* -----------------------------------------------------------
+   Save / Print / WhatsApp
+----------------------------------------------------------- */
+function bumpSalesToday(){ const k='pharma_sales_today'; const cur=parseInt(localStorage.getItem(k)||'0',10); localStorage.setItem(k, String(isNaN(cur)?1:(cur+1))); try{ localStorage.setItem('sales_touch', String(Date.now())); }catch{} }
+function ensureBill(){ if(!SALE.length){ alert('Add items first'); return false; } return true; }
+
+function buildInvoiceObject(saveId=null){
+  const buyer=$('#buyer').value||'Walk-in';
+  const now=new Date();
+  const id = saveId || ('DM' + now.getTime().toString().slice(-6));
+  const sub=+$('#subTotal').textContent||0;
+  const disc=+($('#disc').value||0);
+  const sgst=+$('#sgst').textContent||0;
+  const cgst=+$('#cgst').textContent||0;
+  const total=+$('#netTotal').textContent||0;
+  return {
+    id, buyer, total, subTotal:sub, discountPct:disc, sgst, cgst,
+    items: SALE.slice(), date: now.toISOString(), payMode: $('#payMode').value, payRef: $('#payRef').value
+  };
+}
+
+function saveInvoice(){
+  if(!ensureBill()) return;
+  const bill = buildInvoiceObject();
+  const arr = readLS('pharma_sales_json', []);
+  arr.push(bill);
+  writeLS('pharma_sales_json', arr);
+  localStorage.setItem('last_sale_bill', JSON.stringify(bill));
+  LAST_SAVED = bill;
+  bumpSalesToday();
+  alert('✅ Invoice saved successfully!');
+}
+
+function printBill(){
+  // Prefer last saved bill to keep printed ID stable
+  let data = readLS('last_sale_bill', null);
+  if(!data){
+    if(!ensureBill()) return;
+    data = buildInvoiceObject('TMP'+Date.now().toString().slice(-6));
+    localStorage.setItem('last_sale_bill', JSON.stringify(data));
+  }
+  window.open('./print/print-sales.html?print=1','_blank');
+}
+
+function clinicName(){ try{ return (JSON.parse(localStorage.getItem('branding_json')||'{}').pharmacyName) || (JSON.parse(localStorage.getItem('branding_json')||'{}').clinicName) || 'Your Pharmacy'; }catch{return 'Your Pharmacy';} }
+function waTextFromBill(bill){
+  const header = `*${clinicName()}*\nInvoice: ${bill.id}\nDate: ${new Date(bill.date).toLocaleString()}\nPay: ${bill.payMode}${bill.payRef? ' ('+bill.payRef+')':''}\nBuyer: ${bill.buyer}`;
+  const lines = bill.items.map((r,i)=>`${i+1}. ${r.name} x${r.qty} @ ${money(r.mrp)} = ${money(r.qty*r.mrp)}`);
+  const totals = `Subtotal: ${money(bill.subTotal)}\nDiscount: ${bill.discountPct}%\nSGST 2.5%: ${money(bill.sgst)}\nCGST 2.5%: ${money(bill.cgst)}\n*Net Total: ${money(bill.total)}*`;
+  return encodeURIComponent([header,'',...lines,'',totals].join('\n'));
+}
+function whatsappBill(){
+  // Save first if no saved bill
+  let bill = readLS('last_sale_bill', null);
+  if(!bill){
+    if(!ensureBill()) return;
+    saveInvoice(); bill = readLS('last_sale_bill', null);
+  }
+  const phoneGuess = (bill && bill.buyer && /^\d{10}$/.test(bill.buyer.replace(/\D/g,''))) ? bill.buyer.replace(/\D/g,'') : '';
+  const url = phoneGuess ? `https://wa.me/91${phoneGuess}?text=${waTextFromBill(bill)}` : `https://wa.me/?text=${waTextFromBill(bill)}`;
+  window.open(url,'_blank');
+}
+
+$('#btnSave').addEventListener('click', saveInvoice);
+$('#btnPrint').addEventListener('click', printBill);
+$('#btnWA').addEventListener('click', whatsappBill);
+
+/* -----------------------------------------------------------
+   OPD Rx import queue (DB.sales: {source:'opd', mode:'pending'})
+----------------------------------------------------------- */
+async function listPendingRx(){
+  await dbReady;
+  try{
+    const all = await DB.sales?.toArray?.() || [];
+    const today = new Date().toISOString().slice(0,10);
+    return all.filter(r => (r.source==='opd') && (r.mode==='pending') && String(r.date||'').slice(0,10)===today);
+  }catch{ return []; }
+}
+async function markPulled(idOrObj){
+  try{
+    if(idOrObj?.id!=null) await DB.sales.update(idOrObj.id, {mode:'pulled', updatedAt:new Date().toISOString()});
+  }catch{}
+}
+function bestPoolForDrug(name){
+  const nm=(name||'').toLowerCase();
+  const pool = STOCK.filter(s => (s.name||'').toLowerCase().includes(nm));
+  return pool;
+}
+async function importOneRxRow(rx, patient){
+  const qty = 1; // conservative default (pharmacist adjusts)
+  const pool = bestPoolForDrug(rx.drug||rx.name||'');
+  if(pool.length){
+    addFromPool(pool, qty, '3004');
+  }else{
+    // placeholder row (no stock): still append so bill captures it; mrp 0
+    SALE.push({ name: rx.drug||rx.name||'[No stock match]', pack:'', batch:'', exp:'', hsn:'3004', qty:1, mrp:0 });
+    render();
+  }
+  if(patient && !$('#buyer').value){ $('#buyer').value = patient.pid || patient.name || 'Walk-in'; }
+}
+async function importPendingRx(auto=false){
+  const pending = await listPendingRx();
+  // Update badge
+  $('#rxBadge').style.display = pending.length? 'inline-flex':'none';
+  $('#rxCount').textContent = String(pending.length);
+  if(!pending.length) return;
+
+  if(!auto){
+    // Manual click: import all
+    for(const r of pending){
+      const ptName = r.patientName || r.name || '';
+      if(ptName && !$('#buyer').value) $('#buyer').value = ptName;
+      const items = Array.isArray(r.items)? r.items : [];
+      for(const it of items){ await importOneRxRow(it, {name:ptName, pid:r.pid}); }
+      await markPulled(r);
+    }
+    msg('Imported OPD Rx into current bill');
+    return;
+  }
+
+  // Auto-import (respect toggle)
+  if(!$('#autoImport').checked) return;
+
+  for(const r of pending){
+    const ptName = r.patientName || r.name || '';
+    const items = Array.isArray(r.items)? r.items : [];
+    if(ptName && !$('#buyer').value) $('#buyer').value = ptName;
+    for(const it of items){ await importOneRxRow(it, {name:ptName, pid:r.pid}); }
+    await markPulled(r);
+  }
+  msg('Auto-imported OPD Rx');
+}
+
+/* ===== Real-time listeners (instant pickup when OPD posts) ===== */
+try{
+  if('BroadcastChannel' in window){
+    const ch = new BroadcastChannel('pharmacy_rx');
+    ch.onmessage = (e)=>{
+      if(e?.data?.type === 'pharmacy_rx'){
+        importPendingRx(true);
+      }
+    };
+  }
+}catch{}
+
+window.addEventListener('storage', (e)=>{
+  if(e.key === 'sales_touch'){ importPendingRx(true); }
+});
+
+/* light watchers: focus + 30s */
+let _rxTick=null;
+function startRxWatcher(){
+  if(_rxTick) clearInterval(_rxTick);
+  _rxTick = setInterval(()=>importPendingRx(true), 30000);
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') importPendingRx(true); });
+
+/* -----------------------------------------------------------
+   Shortcuts
+----------------------------------------------------------- */
+document.addEventListener('keydown', (e)=>{
+  const k = (e.ctrlKey||e.metaKey) ? 'Ctrl+'+e.key.toUpperCase() : e.key;
+  if(k==='Enter' && document.activeElement && ['pname','pqty'].includes(document.activeElement.id)){ e.preventDefault(); addItemManual(); }
+  if(k==='Ctrl+S'){ e.preventDefault(); saveInvoice(); }
+  if(k==='Ctrl+P'){ e.preventDefault(); printBill(); }
+  if(k==='Ctrl+W'){ e.preventDefault(); whatsappBill(); }
+  if(k==='Ctrl+D'){ e.preventDefault(); $('#disc').focus(); $('#disc').select(); }
+});
+
+/* -----------------------------------------------------------
+   Boot
+----------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await dbReady;
+  await loadBranding();
+  loadStock(); render();
+
+  // Try preload buyer from last OPD-pushed sale (if any pulled but not billed yet)
+  try{
+    const pulled = (await DB.sales.toArray()).filter(r=>r.source==='opd' && r.mode==='pulled').sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+    if(pulled[0]?.patientName && !$('#buyer').value) $('#buyer').value = pulled[0].patientName;
+  }catch{}
+
+  // Initial Rx check, then watchers
+  importPendingRx(true);
+  startRxWatcher();
+
+  // Buttons
+  $('#btnImportRx').addEventListener('click', ()=>importPendingRx(false));
+});
+</script>
+</body>
+</html>

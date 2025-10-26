@@ -1,0 +1,1 @@
+function LOGOUT(){try{localStorage.removeItem('clinic.auth.role')}catch(_){}location.href='./login.html';}

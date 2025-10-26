@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!-- App wiring -->
+  <script src="./config/config.js"></script>
+  <script src="./scripts/db.js"></script>
+
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Booking Status · Clinic PWA</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <!-- Dexie (for safe fallback/read) -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+
+  <style>
+  :root{
+    /* locked pastel palette (same as pharmacy/settings) */
+    --bg-gradient:linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+    --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --teal:#C8F5E4; --pink:#FBD6E3;
+    --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+    --r:16px; --shadow:0 6px 18px rgba(0,0,0,.08);
+  }
+  :root{ --header-tint:#D6E5DD; --header-tint-rgba:214,229,221; --banner-tint:#DED8F2; --banner-tint-rgba:222,216,242; }
+
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui;background:var(--bg-gradient);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+
+  /* Header */
+  .header{
+    display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+    background:rgba(var(--header-tint-rgba),0.7);
+    border:1px solid #0001;border-radius:12px;margin-top:10px;
+    box-shadow:var(--shadow);backdrop-filter:saturate(120%) blur(2px);
+  }
+  .header .logo{height:40px}
+  .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:600;cursor:pointer}
+  .btn:hover{background:#f1f5f9}
+  .btn.primary{background:var(--primary);color:#fff;border:none}
+
+  /* Banner */
+  .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:var(--banner-tint)}
+  .banner img{width:100%;transform:scale(.65);transform-origin:center;border-radius:var(--r);display:block;mix-blend-mode:multiply;opacity:.95}
+  .banner::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(var(--banner-tint-rgba),.3),rgba(var(--banner-tint-rgba),.3))}
+
+  /* Cards & layout */
+  .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .input,select{border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px}
+  .filters{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+  .badge{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+
+  /* KPI strip */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:8px}
+  .kpi{border:1px solid #e2e8f0;border-radius:14px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+  .kpi h4{margin:0;font-size:12px;color:var(--muted)}
+  .kpi .num{font-size:22px;font-weight:900;margin-top:6px}
+  .kpi.total{background:var(--mint)}
+  .kpi.wait{background:var(--peach)}
+  .kpi.live{background:var(--teal)}
+  .kpi.done{background:var(--lav)}
+  .kpi.cancel{background:#f4f4f5}
+
+  /* Queue table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+  th{background:#f8fafc;position:sticky;top:0;z-index:1}
+  .status{display:inline-block;border-radius:999px;padding:3px 10px;font-weight:700;border:1px solid #e2e8f0;background:#fff}
+  .s-wait{background:#fff;border-color:#eab30833}
+  .s-live{background:#fff;border-color:#10b98133}
+  .s-done{background:#fff;border-color:#6366f133}
+  .s-cancel{background:#fff;border-color:#ef444433}
+  .muted{color:#64748b}
+  .footer{text-align:center;padding:16px 4px;font-size:13px;color:var(--muted);margin:22px 0 14px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <img class="logo" src="./assets/logo.png" alt="logo">
+    <div>
+      <div style="font-weight:900;font-size:18px">Booking Status</div>
+      <div class="muted" style="font-size:13px">Live queue by doctor · read-only</div>
+    </div>
+    <div class="row">
+      <a class="btn" href="./index.html">Home</a>
+      <a class="btn" href="./tv.html">TV Screen</a>
+    </div>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner"><img src="./assets/banner.png" alt="Clinic Banner"></div>
+
+  <!-- Filters + actions -->
+  <div class="card" style="background:var(--mint)">
+    <div class="filters">
+      <div>
+        <label>Date</label><br/>
+        <input id="fDate" type="date" class="input">
+      </div>
+      <div>
+        <label>Doctor</label><br/>
+        <select id="fDoc" class="input">
+          <option value="">All doctors</option>
+        </select>
+      </div>
+      <div>
+        <label>Search</label><br/>
+        <input id="fQ" class="input" placeholder="Token / Patient / Phone">
+      </div>
+      <div class="row">
+        <button class="btn" id="btnRun">Refresh</button>
+        <button class="btn" id="btnClear">Clear</button>
+        <button class="btn primary" id="btnTV">Send to TV</button>
+        <span class="badge" id="stamp">—</span>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpis">
+      <div class="kpi total"><h4>Total</h4><div id="k_total" class="num">—</div></div>
+      <div class="kpi wait"><h4>Waiting</h4><div id="k_wait" class="num">—</div></div>
+      <div class="kpi live"><h4>In Progress</h4><div id="k_live" class="num">—</div></div>
+      <div class="kpi done"><h4>Completed</h4><div id="k_done" class="num">—</div></div>
+      <div class="kpi cancel"><h4>Cancelled</h4><div id="k_cancel" class="num">—</div></div>
+    </div>
+  </div>
+
+  <!-- Queue table -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <b>Queue</b>
+      <small class="muted">Auto-refresh every 10s</small>
+    </div>
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th style="width:70px">Token</th>
+          <th>Patient</th>
+          <th>Phone</th>
+          <th>Doctor</th>
+          <th>Time</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/* ---------- DB bootstrap (read-only safe) ---------- */
+let DBi = window.DB;
+if(!DBi){
+  // very light fallback just to read bookings if db.js not loaded
+  const dx = new Dexie('clinicdb');
+  dx.version(1).stores({ bookings:'++id, date, doctor, token, name, phone, time, status' });
+  DBi = dx;
+}
+
+/* ---------- Helpers ---------- */
+const $ = s=>document.querySelector(s);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+const niceTime = t => {
+  if(!t) return '-';
+  // accept "HH:MM" or ISO
+  if(/^\d{2}:\d{2}$/.test(t)) return t;
+  try{ return new Date(t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }catch{ return String(t); }
+};
+
+function statusClass(s){
+  s=(s||'').toLowerCase();
+  if(s==='in-progress'||s==='live'||s==='ongoing') return 's-live';
+  if(s==='done'||s==='completed') return 's-done';
+  if(s==='cancel'||s==='cancelled') return 's-cancel';
+  return 's-wait';
+}
+function statusLabel(s){
+  s=(s||'').toLowerCase();
+  if(s==='in-progress'||s==='live'||s==='ongoing') return 'In Progress';
+  if(s==='done'||s==='completed') return 'Completed';
+  if(s==='cancel'||s==='cancelled') return 'Cancelled';
+  return 'Waiting';
+}
+
+/* ---------- Load & render ---------- */
+async function loadDoctorsForDate(d){
+  await DBi.open?.();
+  const all = await DBi.table('bookings').where('date').equals(d).toArray().catch(()=>[]);
+  const names = Array.from(new Set(all.map(b=> b.doctor || '').filter(Boolean))).sort();
+  const sel = $('#fDoc'); const cur = sel.value;
+  sel.innerHTML = '<option value="">All doctors</option>' + names.map(n=>`<option>${n}</option>`).join('');
+  // keep selection if still present
+  if(names.includes(cur)) sel.value = cur;
+}
+
+async function queryBookings(){
+  const date = $('#fDate').value || todayISO();
+  const doc  = $('#fDoc').value || '';
+  const q    = ($('#fQ').value||'').trim().toLowerCase();
+
+  await DBi.open?.();
+  let rows = await DBi.table('bookings').where('date').equals(date).toArray().catch(()=>[]);
+  if(doc) rows = rows.filter(r => (r.doctor||'') === doc);
+  if(q){
+    rows = rows.filter(r => 
+      String(r.token||'').toLowerCase().includes(q) ||
+      String(r.name||'').toLowerCase().includes(q)  ||
+      String(r.phone||'').toLowerCase().includes(q)
+    );
+  }
+  // stable sort: status buckets then time
+  const weight = s => ({'waiting':1,'in-progress':2,'live':2,'done':3,'completed':3,'cancelled':4,'cancel':4}[String(s).toLowerCase()]||5);
+  rows.sort((a,b)=> (weight(a.status)-weight(b.status)) || String(a.time||'').localeCompare(String(b.time||'')));
+  return rows;
+}
+
+function renderTable(rows){
+  const tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.token ?? '-'}</td>
+      <td>${r.name ?? '-'}</td>
+      <td>${r.phone ?? '-'}</td>
+      <td>${r.doctor ?? '-'}</td>
+      <td>${niceTime(r.time)}</td>
+      <td><span class="status ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
+    `;
+    tb.appendChild(tr);
+  });
+  // stamp
+  $('#stamp').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
+function renderKPIs(rows){
+  const t = rows.length;
+  const w = rows.filter(r=> statusLabel(r.status)==='Waiting').length;
+  const l = rows.filter(r=> statusLabel(r.status)==='In Progress').length;
+  const d = rows.filter(r=> statusLabel(r.status)==='Completed').length;
+  const c = rows.filter(r=> statusLabel(r.status)==='Cancelled').length;
+  $('#k_total').textContent = t;
+  $('#k_wait').textContent  = w;
+  $('#k_live').textContent  = l;
+  $('#k_done').textContent  = d;
+  $('#k_cancel').textContent= c;
+}
+
+async function run(){
+  await loadDoctorsForDate($('#fDate').value || todayISO());
+  const rows = await queryBookings();
+  renderTable(rows);
+  renderKPIs(rows);
+}
+
+/* ---------- Send to TV (manual broadcast) ---------- */
+function sendToTVPayload(rows){
+  const payload = {
+    ts: Date.now(),
+    date: $('#fDate').value || todayISO(),
+    doctor: $('#fDoc').value || '',
+    items: rows.map(r=>({
+      token:r.token, name:r.name, status:statusLabel(r.status), time:r.time, phone:r.phone, doctor:r.doctor
+    }))
+  };
+  try{
+    localStorage.setItem('tv_queue_payload', JSON.stringify(payload));
+    // optional ping key for tv.html to detect change
+    localStorage.setItem('tv_queue_ping', String(payload.ts));
+    alert('Queue sent to TV.');
+  }catch(e){
+    console.warn(e); alert('Could not send to TV (localStorage).');
+  }
+}
+
+/* ---------- Events & Auto-refresh ---------- */
+$('#btnRun').onclick = run;
+$('#btnClear').onclick = ()=>{ $('#fQ').value=''; run(); };
+$('#fDate').addEventListener('change', run);
+$('#fDoc').addEventListener('change', run);
+$('#fQ').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
+$('#btnTV').onclick = async ()=>{ const rows = await queryBookings(); sendToTVPayload(rows); };
+
+let _timer=null;
+function startAuto(){
+  if(_timer) clearInterval(_timer);
+  _timer = setInterval(run, 10000); // 10s
+}
+
+/* ---------- Boot ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  $('#fDate').value = todayISO();
+  run();
+  startAuto();
+});
+</script>
+
+<!-- Engines (kept consistent) -->
+<script src="/scripts/qrcode.min.js?v=1.1"></script>
+<script src="/scripts/barcode.js?v=8.4.6"></script>
+<script src="/scripts/seed-and-diagnostics.js?v=1.2"></script>
+</body>
+</html>

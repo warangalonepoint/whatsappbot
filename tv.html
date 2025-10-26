@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TV · Live Queue</title>
+
+<!-- App look & colours (locked to the unified pastel theme) -->
+<style>
+:root{
+  --bg-gradient:linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+  --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --teal:#C8F5E4;
+  --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+  --r:18px; --shadow:0 8px 24px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:18px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+  background:var(--bg-gradient);color:var(--ink);}
+
+.wrap{max-width:1200px;margin:0 auto;padding:10px}
+.header{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:rgba(214,229,221,.7); /* mint tint */
+  border:1px solid #0001;border-radius:12px;margin-top:10px;padding:10px 14px;
+  box-shadow:var(--shadow);backdrop-filter:saturate(120%) blur(2px);
+}
+.header .left{display:flex;align-items:center;gap:10px}
+.logo{height:44px}
+.hmeta{display:flex;flex-direction:column}
+.hmeta strong{font-size:20px}
+.hmeta small{font-size:13px;color:var(--muted)}
+.actions{display:flex;gap:8px;align-items:center}
+.btn{background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:6px 12px;font-weight:700;cursor:pointer}
+.btn:hover{background:#f1f5f9}
+
+.banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:var(--lav)}
+.banner img{width:100%;transform:scale(.70);display:block;border-radius:var(--r);mix-blend-mode:multiply;opacity:.95}
+
+.card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:12px}
+.subtitle{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.subtitle h2{margin:0;font-size:22px}
+.clock{font-weight:800;letter-spacing:1px}
+
+.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}
+@media (max-width:1000px){ .grid{grid-template-columns:1fr} }
+
+.table{width:100%;border-collapse:collapse;font-size:18px}
+.table th,.table td{border-bottom:1px solid #e5e7eb;padding:10px 8px;text-align:left}
+.table th{background:#f8fafc;position:sticky;top:0;z-index:1}
+
+.badge{display:inline-block;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:14px;font-weight:800}
+.s_wait{background:#FFF; color:#111;}
+.s_room{background:#C8F5E4; color:#065f46;}    /* In Room */
+.s_next{background:#FFE8D9; color:#8a3b00;}    /* Next */
+.s_done{background:#E5E7EB; color:#475569;}    /* Completed / Skipped */
+
+.big{font-size:44px;font-weight:900;line-height:1.1}
+.callout{background:var(--teal);border:1px solid #0000000d;border-radius:16px;padding:16px;text-align:center}
+.footer{text-align:center;color:var(--muted);font-size:13px;margin:18px 0 10px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+/* Rows get subtle lift for visibility on TV */
+.rowCard{background:#fff;border-radius:12px;border:1px solid #0000000d;box-shadow:var(--shadow);padding:10px;margin-bottom:8px}
+.token{font-weight:900;font-size:22px;width:80px;display:inline-block}
+.name{font-size:20px;font-weight:700}
+.note{font-size:14px;color:#64748b}
+.right{float:right}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Header -->
+  <div class="header">
+    <div class="left">
+      <img id="logo" class="logo" src="./assets/logo.png" alt="logo"/>
+      <div class="hmeta">
+        <strong id="clinicName">Clinic Queue Screen</strong>
+        <small id="clinicTag">Please be seated; you will be called shortly</small>
+      </div>
+    </div>
+    <div class="actions">
+      <span id="today" class="mono"></span>
+      <span id="clock" class="clock mono"></span>
+      <button class="btn" id="btnFull">Fullscreen</button>
+    </div>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner">
+    <img id="banner" src="./assets/banner.png" alt="Clinic Banner">
+  </div>
+
+  <!-- Doctor & Queue -->
+  <div class="card">
+    <div class="subtitle">
+      <h2>
+        Doctor: <span id="docName">—</span>
+        <span class="badge" id="docBadge">OPD</span>
+      </h2>
+      <div class="badge">Date: <span id="forDate">—</span></div>
+    </div>
+
+    <div class="grid" style="margin-top:10px">
+      <!-- Left: next & now -->
+      <section class="callout">
+        <div>Now Serving</div>
+        <div class="big" id="nowToken">—</div>
+        <div class="note" id="nowName">&nbsp;</div>
+        <hr style="border:none;border-top:1px dashed #0f172a22;margin:12px 0">
+        <div>Next</div>
+        <div class="big" id="nextToken">—</div>
+        <div class="note" id="nextName">&nbsp;</div>
+      </section>
+
+      <!-- Right: full list -->
+      <section>
+        <table class="table" id="tbl">
+          <thead>
+            <tr><th style="width:90px">Token</th><th>Patient</th><th>Status</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<script>
+/*
+  TV Screen – Single Doctor View
+  --------------------------------
+  • booking-status.html writes:
+      localStorage.setItem('tv_queue_payload', JSON.stringify({...}));
+      localStorage.setItem('tv_queue_ping', Date.now().toString());
+  • We listen for 'storage' on 'tv_queue_ping' and re-render.
+  • Payload format (example):
+    {
+      doctorId: "D001",
+      doctorName: "Dr. Arjun Singh",
+      date: "2025-10-24",
+      dept: "General Medicine",        // optional
+      items: [
+        { token: 1, name: "Ravi K", status: "IN_ROOM" },
+        { token: 2, name: "Meena",  status: "NEXT"    },
+        { token: 3, name: "Kiran",  status: "WAITING" },
+        { token: 4, name: "Lalith", status: "DONE"    }
+      ]
+    }
+  • TV is locked to a single doctor. If payload has different doctorId and you want to
+    hard-lock to one, set localStorage.tv_doctor_lock = "D00X". We’ll ignore others.
+*/
+
+const $ = s => document.querySelector(s);
+const pad2 = n => String(n).padStart(2,'0');
+
+function tickClock(){
+  const d=new Date();
+  $('#clock').textContent = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  $('#today').textContent = d.toLocaleDateString(undefined, {weekday:'short', day:'2-digit', month:'short', year:'numeric'});
+}
+setInterval(tickClock, 1000); tickClock();
+
+function classFor(status){
+  const s = (status||'').toUpperCase();
+  if(s==='IN_ROOM' || s==='INROOM' || s==='ROOM') return 's_room';
+  if(s==='NEXT') return 's_next';
+  if(s==='DONE' || s==='COMPLETED' || s==='SKIPPED') return 's_done';
+  return 's_wait';
+}
+function human(status){
+  const s=(status||'').toUpperCase();
+  if(s==='IN_ROOM'||s==='INROOM'||s==='ROOM') return 'In Room';
+  if(s==='NEXT') return 'Next';
+  if(s==='DONE'||s==='COMPLETED') return 'Completed';
+  if(s==='SKIPPED') return 'Skipped';
+  return 'Waiting';
+}
+
+function applyBranding(){
+  // Optional branding from settings or localStorage
+  try{
+    const ls = JSON.parse(localStorage.getItem('branding_json')||'null')||{};
+    if(ls.logoUrl)   $('#logo').src = ls.logoUrl;
+    if(ls.bannerUrl) $('#banner').src = ls.bannerUrl;
+    if(ls.clinicName) $('#clinicName').textContent = ls.clinicName;
+    if(ls.clinicTag)  $('#clinicTag').textContent  = ls.clinicTag;
+  }catch{}
+}
+applyBranding();
+
+function render(payload){
+  if(!payload){ clearUI(); return; }
+
+  // Optional hard lock to a doctor id
+  const lock = localStorage.getItem('tv_doctor_lock') || '';
+  if(lock && payload.doctorId && payload.doctorId !== lock) {
+    // Ignore updates for other doctors
+    return;
+  }
+
+  // Header section
+  $('#docName').textContent = payload.doctorName || payload.doctorId || '—';
+  $('#docBadge').textContent = payload.dept || 'OPD';
+  $('#forDate').textContent = payload.date || new Date().toISOString().slice(0,10);
+
+  const list = Array.isArray(payload.items)? payload.items.slice(): [];
+  // Sort by: IN_ROOM first, then NEXT, then token asc, waiting, then done
+  const rank = s => ({IN_ROOM:0,NEXT:1,WAITING:2,DONE:9,COMPLETED:9,SKIPPED:8})[(s||'').toUpperCase()] ?? 3;
+  list.sort((a,b)=> (rank(a.status)-rank(b.status)) || (Number(a.token||0)-Number(b.token||0)));
+
+  // Now & Next
+  const now = list.find(x => String(x.status||'').toUpperCase().includes('ROOM'));
+  const nxt = list.find(x => String(x.status||'').toUpperCase()==='NEXT') || list.find(x => String(x.status||'').toUpperCase()==='WAITING');
+  $('#nowToken').textContent = now ? (now.token ?? '—') : '—';
+  $('#nowName').textContent  = now ? (now.name  ?? '') : '';
+  $('#nextToken').textContent = nxt ? (nxt.token ?? '—') : '—';
+  $('#nextName').textContent  = nxt ? (nxt.name  ?? '') : '';
+
+  // Table
+  const tb = $('#tbl tbody'); tb.innerHTML='';
+  list.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="token">${r.token??''}</span></td>
+      <td><div class="name">${escapeHTML(r.name||'')}</div></td>
+      <td><span class="badge ${classFor(r.status)}">${human(r.status)}</span></td>`;
+    tb.appendChild(tr);
+  });
+
+  // Persist last good payload for reload safety
+  try{ localStorage.setItem('tv_queue_last', JSON.stringify(payload)); }catch{}
+}
+
+function clearUI(){
+  $('#docName').textContent = '—';
+  $('#docBadge').textContent = 'OPD';
+  $('#forDate').textContent = '—';
+  $('#nowToken').textContent='—';
+  $('#nowName').textContent='';
+  $('#nextToken').textContent='—';
+  $('#nextName').textContent='';
+  $('#tbl tbody').innerHTML='';
+}
+
+function escapeHTML(s){ return String(s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function readIncoming(){
+  let p = null;
+  try{ p = JSON.parse(localStorage.getItem('tv_queue_payload')||'null'); }catch{}
+  if(!p){
+    try{ p = JSON.parse(localStorage.getItem('tv_queue_last')||'null'); }catch{}
+  }
+  render(p);
+}
+
+// React to pings from booking-status
+window.addEventListener('storage', (e)=>{
+  if(e.key==='tv_queue_ping'){
+    readIncoming();
+  }
+});
+
+// Fullscreen
+document.getElementById('btnFull').addEventListener('click', ()=>{
+  const el = document.documentElement;
+  if(!document.fullscreenElement) el.requestFullscreen?.();
+  else document.exitFullscreen?.();
+});
+
+// Initial load
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Show today
+  const iso = new Date().toISOString().slice(0,10);
+  document.getElementById('forDate').textContent = iso;
+
+  readIncoming();
+});
+</script>
+
+<!-- Pass1 theme + branding hook (non-invasive) -->
+<script>
+(function(){
+  function readBrand(){
+    try { return JSON.parse(localStorage.getItem('branding_json')||'null') || null; } catch(e){ return null; }
+  }
+  const b = readBrand(); if(!b) return;
+  const root = document.documentElement;
+  const THEMES = {
+    pastel: {
+      "--bg-gradient":"linear-gradient(145deg,#edf3f0,#ece9f6,#fff0e6)",
+      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#17B26A",
+      "--mint":"#C8E3D2","--lav":"#D7CEF0","--peach":"#FFD8B8"
+    },
+    glass: {
+      "--bg-gradient":"linear-gradient(135deg,#f8fafc,#eef2ff)",
+      "--card":"#ffffffcc","--ink":"#0f172a","--muted":"#475569","--primary":"#2563eb",
+      "--mint":"#e2e8f0","--lav":"#e9d5ff","--peach":"#ffedd5"
+    },
+    neo: {
+      "--bg-gradient":"linear-gradient(135deg,#f3f4f6,#fafafa)",
+      "--card":"#ffffff","--ink":"#111827","--muted":"#6b7280","--primary":"#10b981",
+      "--mint":"#d1fae5","--lav":"#ede9fe","--peach":"#ffe4e6"
+    },
+    iphone: {
+      "--bg-gradient":"linear-gradient(180deg,#fdf2f8,#eff6ff)",
+      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#0ea5e9",
+      "--mint":"#e0f2fe","--lav":"#e9d5ff","--peach":"#ffe4e6"
+    }
+  };
+  const theme = THEMES[b.theme || 'pastel'];
+  if(theme){
+    Object.entries(theme).forEach(([k,v])=> root.style.setProperty(k, v));
+  }
+  // Swap logos and banners wherever present
+  const logoUrl = b.logoUrl || "";
+  const banUrl  = b.bannerUrl || "";
+  if(logoUrl){
+    document.querySelectorAll('img#logo, img#ph_logo, img.logo').forEach(el=> el.src = logoUrl);
+  }
+  if(banUrl){
+    document.querySelectorAll('#hdrBanner, .banner img, img[alt*="Banner"]').forEach(el=> el.src = banUrl);
+  }
+  // Titles
+  if(b.clinicName) { const el=document.getElementById('clinicTitle'); if(el) el.textContent=b.clinicName; }
+  if(b.pharmacyName){ const el=document.getElementById('ph_name'); if(el) el.textContent=b.pharmacyName; }
+})();
+</script>
+</body>
+</html>

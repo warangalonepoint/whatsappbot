@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script src="./config/config.js"></script>
+  <!-- Dexie first (so DB.js can rely on it if needed) -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <script src="./scripts/db.js"></script>
+
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Pharmacy Hub · Clinic PWA</title>
+  <link rel="manifest" href="./manifest.json"/>
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <!-- Branding auto-fill (safe if missing; also LS + DB fallback in-page) -->
+  <script defer src="./scripts/pharmacy-branding.js"></script>
+
+  <style>
+  /* ---------- v8.4 pastel set ---------- */
+  :root{
+    --bg-gradient: linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+    --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --pink:#FBD6E3; --teal:#C8F5E4; --amber:#FFE9B3; --gray:#f4f4f5;
+    --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+    --r:18px; --shadow:0 6px 18px rgba(0,0,0,0.08);
+  }
+  /* Header = Mint, Banner = Lavender */
+  :root{ --header-tint:#D6E5DD; --header-tint-rgba:214,229,221; --banner-tint:#DED8F2; --banner-tint-rgba:222,216,242; }
+
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui;background:var(--bg-gradient);color:var(--ink);}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 10px}
+
+  /* Header */
+  .header{
+    display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+    background:rgba(var(--header-tint-rgba),0.7);
+    border:1px solid rgba(0,0,0,0.06);border-radius:12px;margin-top:10px;
+    box-shadow:var(--shadow);backdrop-filter:saturate(120%) blur(2px);
+  }
+  .header .logo{height:40px}
+  .btn{background:#fff;border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;font-weight:600;cursor:pointer}
+  .btn:hover{background:#f1f5f9}
+  .btn.primary{background:var(--primary);color:#fff;border:none}
+
+  /* Info bar (transparent overlay) */
+  .infobar{
+    margin:6px 0 0; padding:8px 12px; border-radius:12px;
+    background:rgba(51,65,85,0.06); color:#334155;
+    backdrop-filter:saturate(120%) blur(2px);
+    box-shadow:0 2px 8px rgba(15,23,42,.06);
+    font-size:13px;
+  }
+
+  /* Banner */
+  .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:var(--banner-tint)}
+  .banner img{width:100%;transform:scale(0.65);transform-origin:center;border-radius:var(--r);display:block;mix-blend-mode:multiply;opacity:.95}
+  .banner::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(var(--banner-tint-rgba),.3),rgba(var(--banner-tint-rgba),.3))}
+
+  /* Tiles */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:16px}
+  .tile{border-radius:var(--r);padding:20px;text-align:left;box-shadow:var(--shadow);transition:.25s transform ease}
+  .tile:hover{transform:translateY(-4px)}
+  .tile h3{margin:4px 0 6px 0}
+  .tile p{margin:0;color:var(--muted);font-size:13px}
+  .badge{display:inline-block;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+
+  /* Distinct tile pastels */
+  .inv{background:var(--mint)}
+  .sales{background:var(--peach)}
+  .purch{background:var(--lav)}
+  .returns{background:var(--pink)}
+  .gst{background:var(--teal)}
+
+  /* KPI strip */
+  .card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);margin-top:16px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  .kpi{border:1px solid #e2e8f0;border-radius:14px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+  .kpi .label{font-size:12px;color:var(--muted)}
+  .kpi .num{font-size:22px;font-weight:900;margin-top:6px}
+
+  /* KPI colours */
+  .kpi.stock{background:var(--mint)}
+  .kpi.low{background:var(--amber)}
+  .kpi.near{background:var(--pink)}
+  .kpi.sales{background:var(--peach)}
+  .kpi.purch{background:var(--lav)}
+  .kpi.retcount{background:var(--teal)}
+  .kpi.retval{background:var(--gray)}
+
+  /* Footer */
+  .footer{text-align:center;padding:16px 4px;font-size:13px;color:var(--muted);margin:22px 0 14px}
+
+  /* Modal (Returns Log) — slide-in from right */
+  .modal-backdrop{
+    position:fixed;inset:0;display:block;opacity:0;pointer-events:none;
+    background:rgba(0,0,0,.0);
+    transition:opacity .25s ease, background .25s ease;
+    z-index:50;
+  }
+  .modal-backdrop.show{opacity:1;pointer-events:auto;background:rgba(0,0,0,.35);backdrop-filter:blur(2px)}
+  .modal{
+    position:absolute;top:0;right:0;height:100vh;width:min(100%,980px);
+    background:#fff;border-radius:16px 0 0 16px;box-shadow:0 20px 50px rgba(0,0,0,.25);
+    transform:translateX(24px);opacity:0;
+    transition:transform .28s cubic-bezier(.22,.61,.36,1), opacity .22s ease;
+    display:flex;flex-direction:column;
+  }
+  .modal-backdrop.show .modal{transform:translateX(0);opacity:1}
+
+  .modal .head{
+    display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #e5e7eb;background:#f8fafc;border-radius:16px 0 0 0;
+  }
+  .modal .body{padding:12px 14px;overflow:auto}
+  .modal .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .modal .table{width:100%;border-collapse:collapse;font-size:13px}
+  .modal .table th,.modal .table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}
+  .modal .table th{background:#f1f5f9}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header" role="banner" aria-label="Pharmacy Header">
+    <img id="ph_logo" class="logo" src="./assets/logo.png" alt="Pharmacy logo">
+    <div>
+      <div id="ph_name" style="font-weight:900;font-size:18px">Pharmacy</div>
+      <div style="font-size:13px;color:var(--muted)">Pharmacy Hub</div>
+    </div>
+    <a class="btn" href="./index.html" aria-label="Go to Home">Home</a>
+  </div>
+
+  <!-- Transparent info bar -->
+  <div class="infobar" id="ph_info" aria-live="polite">
+    <span id="ph_addr">—</span> ·
+    Ph: <b id="ph_phone">—</b> ·
+    GST: <b id="ph_gst">—</b>
+  </div>
+
+  <!-- Banner -->
+  <div class="banner" aria-hidden="true">
+    <img src="./assets/banner.png" alt="Clinic Banner">
+  </div>
+
+  <!-- Quick modules -->
+  <div class="grid" role="navigation" aria-label="Pharmacy Modules">
+    <a class="tile inv" href="./inventory.html">
+      <div class="badge">FEFO</div>
+      <h3>Inventory</h3>
+      <p>Manage batches, expiries, low stock alerts.</p>
+    </a>
+
+    <a class="tile sales" href="./sales.html">
+      <div class="badge">POS</div>
+      <h3>Sales</h3>
+      <p>Dispense from FEFO, print retail bill (A5).</p>
+    </a>
+
+    <a class="tile purch" href="./purchases.html">
+      <div class="badge">GST</div>
+      <h3>Purchases</h3>
+      <p>Add distributor invoices, update stock (A4).</p>
+    </a>
+
+    <a class="tile returns" href="./returns.html">
+      <div class="badge">Reverse</div>
+      <h3>Returns</h3>
+      <p>Sales/Purchase returns, stock adjust, print slip (A5).</p>
+    </a>
+
+    <a class="tile gst" href="./gst.html">
+      <div class="badge">Report</div>
+      <h3>GST Reports</h3>
+      <p>CGST/SGST classes, monthly summary, export.</p>
+    </a>
+
+    <!-- Supplier Accounts -->
+    <a class="tile gst" href="./suppliers.html">
+      <div class="badge">Accounts</div>
+      <h3>Supplier Accounts</h3>
+      <p>Payables, payments, purchase returns, CSV.</p>
+    </a>
+  </div>
+
+  <!-- Live overview KPIs -->
+  <div class="card" aria-label="Pharmacy KPIs">
+    <div class="kpis">
+      <div class="kpi stock"><div class="label">Total Batches</div><div class="num" id="k_stock">0</div></div>
+      <div class="kpi low"><div class="label">Low Stock (≤2)</div><div class="num" id="k_low">0</div></div>
+      <div class="kpi near"><div class="label">Near Expiry (≤2 mo)</div><div class="num" id="k_exp">0</div></div>
+      <div class="kpi sales"><div class="label">Sales Today</div><div class="num" id="k_salesToday">0</div></div>
+      <div class="kpi purch"><div class="label">Purchases (This Month)</div><div class="num" id="k_purchasesMonth">0</div></div>
+      <div class="kpi retcount"><div class="label">Returns (This Month)</div><div class="num" id="k_returnsMonth">0</div></div>
+      <div class="kpi retval"><div class="label">Returns Value (This Month)</div><div class="num" id="k_returnsValue">₹0</div></div>
+    </div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn" onclick="openLog()">View Returns Log</button>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
+</div>
+
+<!-- Modal: Returns Log -->
+<div id="modalWrap" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal">
+    <div class="head">
+      <div style="font-weight:800">Returns Log</div>
+      <div class="row">
+        <label for="logMonth">Month:</label>
+        <input type="month" id="logMonth" />
+        <button class="btn" onclick="refreshLog()">Refresh</button>
+        <button class="btn" onclick="exportLogCSV()">Export CSV</button>
+        <button class="btn" onclick="closeLog()">Close</button>
+      </div>
+    </div>
+    <div class="body">
+      <table class="table" id="logTable">
+        <thead>
+          <tr>
+            <th>Date/Time</th>
+            <th>Type</th>
+            <th>Reference</th>
+            <th>Party</th>
+            <th style="text-align:right">Value (₹)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" style="text-align:right;font-weight:700">Total</td>
+            <td id="logTotal" style="text-align:right">0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Branding loader (Admin-editable) =====
+   Sources (in order):
+   1) PharmacyBranding helper (if script present)
+   2) localStorage keys: pharmacy_name, pharmacy_address, pharmacy_phone, pharmacy_gst, pharmacy_logo
+   3) DB.settings('branding') fallback (pharmacyName/address if present)
+*/
+(function(){
+  function apply(b){
+    const name  = b?.name    || localStorage.getItem('pharmacy_name')   || b?.pharmacyName || 'Pharmacy';
+    const addr  = b?.address || localStorage.getItem('pharmacy_address')|| '';
+    const phone = b?.phone   || localStorage.getItem('pharmacy_phone')  || '';
+    const gst   = b?.gst     || localStorage.getItem('pharmacy_gst')    || '';
+    const logo  = b?.logoUrl || localStorage.getItem('pharmacy_logo')   || './assets/logo.png';
+    const elName  = document.getElementById('ph_name');
+    const elAddr  = document.getElementById('ph_addr');
+    const elPhone = document.getElementById('ph_phone');
+    const elGst   = document.getElementById('ph_gst');
+    const elLogo  = document.getElementById('ph_logo');
+    if(elName)  elName.textContent = name;
+    if(elAddr)  elAddr.textContent = addr || '—';
+    if(elPhone) elPhone.textContent = phone || '—';
+    if(elGst)   elGst.textContent = gst || '—';
+    if(elLogo)  elLogo.src = logo;
+  }
+
+  if (window.PharmacyBranding && typeof PharmacyBranding.onChange === 'function') {
+    PharmacyBranding.onChange(apply);
+  } else {
+    apply({});
+    // Async fallback to DB.settings('branding')
+    (async ()=>{
+      try{
+        if (window.DB?.settings?.get){
+          const rec = await DB.settings.get('branding');
+          const v = rec?.val || rec?.value || null;
+          if (v) apply({
+            name: v.pharmacyName || v.clinicName,
+            address: v.address,
+            phone: v.phone,
+            gst: v.gst,
+            logoUrl: v.logoUrl
+          });
+        }
+      }catch(e){}
+    })();
+  }
+})();
+
+/* =============== Hub KPIs ================== */
+function readLS(key, fallback){ try{ const v=JSON.parse(localStorage.getItem(key)||'null'); return v ?? fallback; }catch{ return fallback; } }
+function monthOf(rec){
+  if(rec?.date) return String(rec.date).slice(0,7);
+  if(rec?.ts){ const d=new Date(rec.ts); return d.toISOString().slice(0,7); }
+  return '';
+}
+
+function isNearExpiry(exp){
+  if(!exp) return false;
+  let d;
+  // Accept "MM/YY" or "YYYY-MM"
+  if (/^\d{2}\/\d{2}$/.test(exp)){
+    const [m,yy] = exp.split('/').map(n=>parseInt(n,10));
+    d = new Date(2000 + yy, (m||1)-1, 1);
+  } else if (/^\d{4}-\d{2}/.test(exp)){
+    d = new Date(exp + '-01');
+  } else {
+    return false;
+  }
+  const today=new Date();
+  const diffMonths = (d.getFullYear()-today.getFullYear())*12 + (d.getMonth()-today.getMonth());
+  return diffMonths <= 2;
+}
+function setText(id,val){ const el=document.getElementById(id); if(el) el.textContent=val; }
+
+function loadHubStats(){
+  // Stock
+  const stock = readLS('pharma_stock_json', []);
+  const low = stock.filter(s => (Number(s.qty)||0) <= 2).length;
+  const near = stock.filter(s => isNearExpiry(s.exp || s.expiry)).length;
+  setText('k_stock', stock.length);
+  setText('k_low', low);
+  setText('k_exp', near);
+
+  // Sales today
+  const salesArr = readLS('pharma_sales_json', []);
+  const today = new Date().toISOString().slice(0,10);
+  const salesToday = salesArr.filter(r => (r.date||'').startsWith(today) || (r.ts && new Date(r.ts).toISOString().slice(0,10)===today)).length;
+  setText('k_salesToday', salesToday);
+
+  // Purchases (This Month)
+  const override = parseInt(localStorage.getItem('pharma_purchases_month')||'',10);
+  const purchArr = readLS('pharma_purchases_json', []);
+  const thisMonth = new Date().toISOString().slice(0,7);
+  const purchCount = purchArr.filter(r => monthOf(r)===thisMonth).length;
+  setText('k_purchasesMonth', Number.isFinite(override) ? override : purchCount);
+
+  // Returns this month
+  const returns = readLS('pharma_returns_json', []);
+  const retMonth = returns.filter(r => (r.date||'').startsWith(thisMonth) || monthOf(r)===thisMonth);
+  const retValue = retMonth.reduce((a,r)=>a + (Number(r.total)||0), 0);
+  setText('k_returnsMonth', retMonth.length);
+  setText('k_returnsValue', '₹' + retValue.toFixed(2));
+}
+
+loadHubStats();
+window.addEventListener('storage', loadHubStats);
+if("serviceWorker" in navigator){navigator.serviceWorker.register("./service-worker.js").catch(()=>{});}
+
+/* =============== Returns Log Modal ================== */
+const modalBackdrop = document.getElementById('modalWrap');
+
+function openLog(){
+  const m = document.getElementById('logMonth');
+  if(!m.value) m.value = new Date().toISOString().slice(0,7);
+  refreshLog();
+  modalBackdrop.classList.add('show');
+  modalBackdrop.setAttribute('aria-hidden','false');
+}
+
+function closeLog(){
+  modalBackdrop.classList.remove('show');
+  modalBackdrop.setAttribute('aria-hidden','true');
+}
+
+function refreshLog(){
+  const month = document.getElementById('logMonth').value || new Date().toISOString().slice(0,7);
+  const rows = readLS('pharma_returns_json', []).filter(r => (r.date||'').startsWith(month) || monthOf(r)===month);
+  const tb = document.querySelector('#logTable tbody'); tb.innerHTML='';
+  let total=0;
+  rows.slice().reverse().forEach(r=>{
+    const dt = r.ts ? new Date(r.ts).toLocaleString() : (r.date ? new Date(r.date).toLocaleString() : '-');
+    total += (Number(r.total)||0);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${dt}</td>
+      <td>${r.rtype==='sales'?'Sales Return':'Purchase Return'}</td>
+      <td>${r.ref||'-'}</td>
+      <td>${r.party||'-'}</td>
+      <td style="text-align:right">${(Number(r.total)||0).toFixed(2)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  document.getElementById('logTotal').textContent = total.toFixed(2);
+}
+
+function exportLogCSV(){
+  const rows=[["Date/Time","Type","Reference","Party","Value"]];
+  document.querySelectorAll('#logTable tbody tr').forEach(tr=>{
+    const tds=[...tr.children].map(td=>td.innerText);
+    rows.push(tds);
+  });
+  const csv = rows.map(r=>r.map(v=>{
+    const s=String(v??'').replace(/"/g,'""');
+    return /[",\n]/.test(s)?`"${s}"`:s;
+  }).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='returns-log.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* Close modal handlers */
+modalBackdrop.addEventListener('click', (e)=>{ if(e.target===modalBackdrop) closeLog(); });
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeLog(); });
+</script>
+
+<!-- Engines + wiring -->
+<script src="/scripts/qrcode.min.js?v=1.1"></script>
+<script src="/scripts/barcode.js?v=8.4.6"></script>
+<script src="/scripts/app-wiring.js?v=1.1"></script>
+<script src="/scripts/seed-and-diagnostics.js?v=1.3"></script>
+
+<!-- Pass1 theme + branding hook (non-invasive) -->
+<script>
+(function(){
+  function readBrand(){
+    try { return JSON.parse(localStorage.getItem('branding_json')||'null') || null; } catch(e){ return null; }
+  }
+  const b = readBrand(); if(!b) return;
+  const root = document.documentElement;
+  const THEMES = {
+    pastel: {
+      "--bg-gradient":"linear-gradient(145deg,#edf3f0,#ece9f6,#fff0e6)",
+      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#17B26A",
+      "--mint":"#C8E3D2","--lav":"#D7CEF0","--peach":"#FFD8B8"
+    },
+    glass: {
+      "--bg-gradient":"linear-gradient(135deg,#f8fafc,#eef2ff)",
+      "--card":"#ffffffcc","--ink":"#0f172a","--muted":"#475569","--primary":"#2563eb",
+      "--mint":"#e2e8f0","--lav":"#e9d5ff","--peach":"#ffedd5"
+    },
+    neo: {
+      "--bg-gradient":"linear-gradient(135deg,#f3f4f6,#fafafa)",
+      "--card":"#ffffff","--ink":"#111827","--muted":"#6b7280","--primary":"#10b981",
+      "--mint":"#d1fae5","--lav":"#ede9fe","--peach":"#ffe4e6"
+    },
+    iphone: {
+      "--bg-gradient":"linear-gradient(180deg,#fdf2f8,#eff6ff)",
+      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#0ea5e9",
+      "--mint":"#e0f2fe","--lav":"#e9d5ff","--peach":"#ffe4e6"
+    }
+  };
+  const theme = THEMES[b.theme || 'pastel'];
+  if(theme){
+    Object.entries(theme).forEach(([k,v])=> root.style.setProperty(k, v));
+  }
+  // Swap logos and banners wherever present
+  const logoUrl = b.logoUrl || "";
+  const banUrl  = b.bannerUrl || "";
+  if(logoUrl){
+    document.querySelectorAll('img#logo, img#ph_logo, img.logo').forEach(el=> el.src = logoUrl);
+  }
+  if(banUrl){
+    document.querySelectorAll('#hdrBanner, .banner img, img[alt*="Banner"]').forEach(el=> el.src = banUrl);
+  }
+  // Titles
+  if(b.clinicName) { const el=document.getElementById('clinicTitle'); if(el) el.textContent=b.clinicName; }
+  if(b.pharmacyName){ const el=document.getElementById('ph_name'); if(el) el.textContent=b.pharmacyName; }
+})();
+</script>
+</body>
+</html>

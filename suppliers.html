@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Pharmacy · Supplier Accounts</title>
+
+<!-- Keep your global stylesheet if present -->
+<link rel="stylesheet" href="../../styles/styles.css"/>
+
+<!-- Local palette to match pharmacy.html (works even without external CSS) -->
+<style>
+  :root{
+    --bg-gradient: linear-gradient(145deg,#eef3f1,#f0eef9,#fff2eb);
+    --mint:#D6E5DD; --lav:#DED8F2; --peach:#FFE8D9; --pink:#FBD6E3; --teal:#C8F5E4; --amber:#FFE9B3; --gray:#f4f4f5;
+    --card:#ffffff; --ink:#0f172a; --muted:#475569; --primary:#139a5b;
+    --header-tint:#D6E5DD; --header-tint-rgba:214,229,221;   /* Mint header */
+    --banner-tint:#DED8F2; --banner-tint-rgba:222,216,242;   /* Lavender banner */
+    --shadow:0 6px 18px rgba(0,0,0,.08); --r:16px; --glass:rgba(255,255,255,.7);
+  }
+  body{margin:0;font:14px/1.5 system-ui;background:var(--bg-gradient);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:12px}
+
+  /* Header matches pharmacy.html (mint tint) */
+  .header{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:12px;margin:10px 0;
+    background:rgba(var(--header-tint-rgba),0.7); border:1px solid rgba(0,0,0,.06); box-shadow:var(--shadow);
+    backdrop-filter:saturate(120%) blur(2px)
+  }
+  .header .logo{height:40px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+  /* Lavender banner like pharmacy.html */
+  .banner{position:relative;overflow:hidden;border-radius:var(--r);margin:10px 0;background:var(--banner-tint)}
+  .banner img{width:100%;transform:scale(.65);transform-origin:center;border-radius:var(--r);mix-blend-mode:multiply;opacity:.95;display:block}
+  .banner::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(var(--banner-tint-rgba),.3),rgba(var(--banner-tint-rgba),.3))}
+
+  .btn{border:1px solid #cbd5e1;border-radius:20px;padding:6px 14px;background:#fff;font-weight:700;cursor:pointer;text-decoration:none;color:inherit}
+  .btn:hover{background:#f1f5f9}
+  .btn.primary{background:var(--primary);color:#fff;border:none}
+  .btn.ghost{background:#fff;border:1px solid #e5e7eb}
+
+  .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:12px}
+  .grid{display:grid;gap:10px;grid-template-columns:2fr 1fr}
+  @media(max-width:1100px){.grid{grid-template-columns:1fr}}
+  .input,select{border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;width:100%}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .small{font-size:12px;color:#64748b}
+  .badge{border:1px solid #e5e7eb;border-radius:999px;padding:4px 10px;font-weight:700;background:#fff}
+  .table{width:100%;border-collapse:collapse;font-size:13px}
+  .table th,.table td{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}
+  .table th{background:#f8fafc}
+  .right{display:flex;justify-content:space-between;align-items:center}
+  .danger{outline:2px solid #ef4444}
+  .warn{outline:2px solid #fbbf24}
+
+  /* KPI pastels exactly like hub */
+  .kpis{display:grid;gap:10px;grid-template-columns:repeat(4,1fr);margin:10px 0}
+  .kpi{border-radius:16px;padding:12px;box-shadow:var(--shadow);border:1px solid #0000000d}
+  .kpi h4{margin:0;font-size:12px;color:#475569}
+  .kpi b{display:block;margin-top:6px;font-size:20px}
+  .kpi.mint{background:var(--mint)}
+  .kpi.lav{background:var(--lav)}
+  .kpi.peach{background:var(--peach)}
+  .kpi.teal{background:var(--teal)}
+
+  .hint{font-size:12px;color:#64748b;margin-top:6px}
+  .pill{display:inline-block;border-radius:999px;padding:4px 10px;background:#f1f5f9;border:1px solid #e5e7eb;font-size:12px}
+</style>
+
+<!-- Dexie + branding -->
+<script defer src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+<script defer src="../../scripts/pharmacy-branding.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <a class="btn" href="./index.html">← Pharmacy</a>
+      <img id="logo" class="logo" src="../../assets/pharmacy-logo.png" alt="logo"/>
+      <div>
+        <div id="name" style="font-weight:800">Supplier Accounts</div>
+        <div id="tag" class="small">Payables · Payments · Due · CSV</div>
+      </div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="./purchases.html">Purchases</a>
+      <a class="btn" href="./inventory.html">Inventory</a>
+      <a class="btn" href="./reports.html">Reports</a>
+    </div>
+  </div>
+
+  <!-- Lavender banner -->
+  <div class="banner">
+    <img src="../../assets/banner.png" alt="Clinic Banner">
+  </div>
+
+  <!-- KPI strip -->
+  <section class="kpis">
+    <div class="kpi mint">
+      <h4>Total Due</h4><b id="k_due">—</b>
+      <span class="small">Across all suppliers</span>
+    </div>
+    <div class="kpi lav">
+      <h4>Suppliers</h4><b id="k_sup">—</b>
+      <span class="small">Active in books</span>
+    </div>
+    <div class="kpi peach">
+      <h4>Payments (This Month)</h4><b id="k_pay">—</b>
+      <span class="small">Recorded outflow</span>
+    </div>
+    <div class="kpi teal">
+      <h4>Purchases (This Month)</h4><b id="k_purch">—</b>
+      <span class="small">Invoice totals</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <!-- Left: Summary table -->
+    <section class="card">
+      <div class="right">
+        <b>Balances by Supplier</b>
+        <div class="row">
+          <input id="q" class="input" placeholder="Search supplier"/>
+          <button class="btn" id="btnRun">Run</button>
+          <button class="btn" id="btnCSV">Export CSV</button>
+          <span class="badge" id="stat">—</span>
+        </div>
+      </div>
+      <table class="table" id="tbl">
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th>Opening</th>
+            <th>Purchases</th>
+            <th>Payments</th>
+            <th>Purchase Returns</th>
+            <th>Due</th>
+            <th>Sales (approx)</th>
+            <th>Pay</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Right: Add payment -->
+    <section class="card">
+      <div class="right"><b>Record Payment to Supplier</b><span class="pill" id="selDue">—</span></div>
+      <div class="row" style="margin-top:8px">
+        <input id="pSupplier" class="input" placeholder="Supplier name *">
+        <input id="pDate" class="input" type="date">
+        <select id="pMode" class="input">
+          <option>Cash</option><option>UPI</option><option>Bank</option><option>Card</option><option>Other</option>
+        </select>
+        <input id="pRef" class="input" placeholder="Ref # / txn id">
+        <input id="pAmt" class="input" type="number" step="0.01" placeholder="Amount *">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="pNotes" class="input" placeholder="Notes (optional)">
+        <button class="btn primary" id="btnSave">Save Payment</button>
+      </div>
+      <div class="hint">“Due until paid” — balances decrease as you record payments. Returns reduce due.</div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:12px">
+    <b>Sales vs Purchases by Supplier (approx)</b>
+    <div class="small">Sales are attributed to the supplier of the latest GRN for each SKU. Heuristic but useful for trend.</div>
+    <table class="table" id="tblKP">
+      <thead><tr><th>Supplier</th><th>Purchases</th><th>Sales (approx)</th><th>Sales / Purch Ratio</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</div>
+
+<script>
+/* ---------- DB bootstrap / fallbacks ---------- */
+let DB = window.DB;
+if(!DB){
+  const db = new Dexie('clinicdb_pos_fallback');
+  db.version(1).stores({
+    purchases:'++id, supplier, supplierId, invNo, date, items, subtotal, total',
+    supplier_payments:'++id, supplier, supplierId, date, mode, refNo, amount, notes',
+    supplier_opening_balances:'++id, supplier, supplierId, openingAmount, asOfDate',
+    returns:'++id, date, source, refId, items',
+    batches:'++id, sku, batchNo, rate, mrp',
+    sales:'++id, date, source, items, total',
+    products:'++id, sku, name, form, brandName, companyName'
+  });
+  DB = db;
+}
+
+/* ---------- Helpers ---------- */
+const $ = s => document.querySelector(s);
+const INR = n => '₹' + Number(n||0).toFixed(2);
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+document.getElementById('pDate').value = todayISO();
+
+// Branding (optional)
+if (window.PharmacyBranding?.onChange) {
+  PharmacyBranding.onChange(b=>{
+    const el=document.getElementById('logo');
+    if(el) el.src = b.logoUrl || '../../assets/pharmacy-logo.png';
+  });
+}
+
+// Normalize supplier field across tables
+const supKey = (x)=> String(x?.supplierId || x?.supplier || '').trim();
+
+/* ---------- Aggregate helpers ---------- */
+async function buildLatestSupplierBySku(){
+  const purs = await DB.table('purchases').toArray().catch(()=>[]);
+  purs.sort((a,b)=> (a.date||'').localeCompare(b.date||'')); // oldest..newest
+  const map={};
+  purs.forEach(p=>{
+    const s = supKey(p);
+    (p.items||[]).forEach(it=>{
+      const sku = it.sku || '';
+      if(sku) map[sku] = s;
+    });
+  });
+  return map;
+}
+
+async function computeReturnsValuePerSupplier(){
+  // Derive supplier via returns.refId → purchases.invNo (DB.returns has no supplier field)
+  const [rets, purs, batches] = await Promise.all([
+    DB.table('returns').where('source').equals('purchase').toArray().catch(()=>[]),
+    DB.table('purchases').toArray().catch(()=>[]),
+    DB.table('batches').toArray().catch(()=>[])
+  ]);
+  const rateByKey={}; batches.forEach(b=> rateByKey[`${b.sku}|${(b.batchNo||'').toUpperCase()}`]=+b.rate||0);
+  const purchByInv = {};
+  purs.forEach(p => purchByInv[(p.invNo||'').trim()] = p);
+
+  const bySup={};
+  rets.forEach(r=>{
+    const p = purchByInv[(r.refId||'').trim()];
+    const sup = p ? supKey(p) : '(unknown)';
+    const amt = (r.items||[]).reduce((a,it)=>
+      a + (+it.qty||0)*(rateByKey[`${it.sku}|${(it.batchNo||'').toUpperCase()}`]||0),0);
+    bySup[sup]=(bySup[sup]||0)+amt;
+  });
+  return bySup;
+}
+
+async function aggregateBalances(qFilter=''){
+  const [opens,purs,pays,retVal] = await Promise.all([
+    DB.table('supplier_opening_balances').toArray().catch(()=>[]),
+    DB.table('purchases').toArray().catch(()=>[]),
+    DB.table('supplier_payments').toArray().catch(()=>[]),
+    computeReturnsValuePerSupplier()
+  ]);
+  const supSet=new Set();
+  opens.forEach(o=>supSet.add(supKey(o)));
+  purs.forEach(p=>supSet.add(supKey(p)));
+  pays.forEach(p=>supSet.add(supKey(p)));
+
+  const rows=[];
+  for(const sup of supSet){
+    const sname = String(sup||'').trim();
+    if(qFilter && !sname.toLowerCase().includes(qFilter)) continue;
+
+    const opening   = opens.filter(o=> supKey(o)===sname).reduce((a,b)=>a+(+b.openingAmount||0),0);
+    const purchases = purs.filter(p=> supKey(p)===sname).reduce((a,b)=>a+(+b.subtotal||+b.total||0),0);
+    const payments  = pays.filter(p=> supKey(p)===sname).reduce((a,b)=>a+(+b.amount||0),0);
+    const pReturns  = +retVal[sname]||0;
+    const due = Math.max(0, opening + purchases - payments - pReturns);
+    rows.push({supplier:sname||'(unknown)', opening, purchases, payments, pReturns, due});
+  }
+  rows.sort((a,b)=> (b.due - a.due));
+  return rows;
+}
+
+async function buildSalesVsPurch(){
+  const [purs,sales] = await Promise.all([
+    DB.table('purchases').toArray().catch(()=>[]),
+    DB.table('sales').toArray().catch(()=>[])
+  ]);
+  const purchBySup={}; purs.forEach(p=>{
+    const s = supKey(p);
+    purchBySup[s]=(purchBySup[s]||0)+(+p.subtotal||+p.total||0);
+  });
+  const latestSupBySku = await buildLatestSupplierBySku();
+  const salesBySup={};
+  sales.forEach(s=>{
+    (s.items||[]).forEach(it=>{
+      const sku = it.sku || it.SKU || it.code || '';
+      const sup = latestSupBySku[sku] || '(unknown)';
+      const line = (+it.qty||0)*(+it.rate||+it.mrp||+it.price||0);
+      salesBySup[sup]=(salesBySup[sup]||0)+line;
+    });
+  });
+  const supSet=new Set([...Object.keys(purchBySup), ...Object.keys(salesBySup)]);
+  const rows=[];
+  for(const sup of supSet){
+    const p = purchBySup[sup]||0, s = salesBySup[sup]||0;
+    const ratio = p>0 ? (s/p).toFixed(2) : '—';
+    rows.push({supplier:sup||'(unknown)', purchases:p, sales:s, ratio});
+  }
+  rows.sort((a,b)=> (b.sales - a.sales));
+  return rows;
+}
+
+/* ---------- Renderers ---------- */
+function escHTML(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderBalances(rows){
+  const tb=$('#tbl tbody'); tb.innerHTML='';
+  let totalDue=0;
+  rows.forEach(r=>{
+    totalDue += (+r.due||0);
+    const tr=document.createElement('tr');
+    if(r.due>0) tr.className = (r.due>50000?'danger':(r.due>10000?'warn':'')); // visual cues
+    tr.innerHTML = `
+      <td>${escHTML(r.supplier)}</td>
+      <td>${INR(r.opening)}</td>
+      <td>${INR(r.purchases)}</td>
+      <td>${INR(r.payments)}</td>
+      <td>${INR(r.pReturns)}</td>
+      <td><b>${INR(r.due)}</b></td>
+      <td>${INR(r.sales||0)}</td>
+      <td><button class="btn" onclick="prefill('${escHTML(r.supplier).replace(/'/g,'&#39;')}')">Pay</button></td>
+    `;
+    tb.appendChild(tr);
+  });
+  $('#stat').textContent = `Suppliers: ${rows.length} · Total Due: ${INR(totalDue)}`;
+  $('#k_due').textContent = INR(totalDue);
+  $('#k_sup').textContent = rows.length;
+}
+function renderSalesVsPurch(rows){
+  const tb=$('#tblKP tbody'); tb.innerHTML='';
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${escHTML(r.supplier)}</td><td>${INR(r.purchases)}</td><td>${INR(r.sales)}</td><td>${r.ratio}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ---------- Payment form ---------- */
+function prefill(name){
+  $('#pSupplier').value=name;
+  updateInlineDueDisplay(name);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function updateInlineDueDisplay(name){
+  const rows = await aggregateBalances('');
+  const rec = rows.find(r=> (r.supplier||'')===name);
+  $('#selDue').textContent = rec ? `Due: ${INR(rec.due)}` : '—';
+}
+async function savePayment(){
+  const supplier=$('#pSupplier').value.trim();
+  const date=$('#pDate').value||todayISO();
+  const mode=$('#pMode').value;
+  const refNo=$('#pRef').value.trim();
+  const amount=+($('#pAmt').value||0);
+  const notes=$('#pNotes').value.trim();
+  if(!supplier||amount<=0){ alert('Supplier and positive amount required'); return; }
+  await DB.table('supplier_payments').add({supplierId:supplier, supplier, date, mode, refNo, amount, notes});
+  $('#pAmt').value=''; $('#pRef').value=''; $('#pNotes').value='';
+  await run();
+  updateInlineDueDisplay(supplier);
+}
+document.getElementById('btnSave').onclick=savePayment;
+
+/* ---------- Month KPIs ---------- */
+function firstOfMonth(d){ d=new Date(d); d.setDate(1); return d.toISOString().slice(0,10); }
+async function refreshMonthKPIs(){
+  const today = new Date().toISOString().slice(0,10);
+  const from  = firstOfMonth(today);
+  const [pays,purs] = await Promise.all([
+    DB.table('supplier_payments').toArray().catch(()=>[]),
+    DB.table('purchases').toArray().catch(()=>[])
+  ]);
+  const paySum = pays.filter(p=> (p.date||'')>=from && (p.date||'')<=today).reduce((a,b)=>a+(+b.amount||0),0);
+  const purchSum = purs.filter(p=> (p.date||'')>=from && (p.date||'')<=today).reduce((a,b)=>a+(+b.total||+b.subtotal||0),0);
+  $('#k_pay').textContent = INR(paySum);
+  $('#k_purch').textContent = INR(purchSum);
+}
+
+/* ---------- Runner & CSV ---------- */
+async function run(){
+  const q=($('#q').value||'').trim().toLowerCase();
+  const rows = await aggregateBalances(q);
+  const svp = await buildSalesVsPurch();
+  const bySupSVP = Object.fromEntries(svp.map(r=>[r.supplier,r.sales]));
+  rows.forEach(r=> r.sales = bySupSVP[r.supplier]||0 );
+  renderBalances(rows);
+  renderSalesVsPurch(svp);
+  await refreshMonthKPIs();
+}
+document.getElementById('btnRun').onclick=run;
+
+function exportCSV(){
+  const headers=[...document.querySelectorAll('#tbl thead th')].map(th=>th.textContent);
+  const rows=[...document.querySelectorAll('#tbl tbody tr')].map(tr=>[...tr.children].slice(0,7).map(td=>td.textContent));
+  const esc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const lines=[headers.slice(0,7).map(esc).join(',')].concat(rows.map(r=>r.map(esc).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='supplier-balances.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById('btnCSV').onclick=exportCSV;
+
+document.addEventListener('DOMContentLoaded', run);
+</script>
+
+<!-- Pass1 theme + branding hook (non-invasive) -->
+<script>
+(function(){
+  function readBrand(){
+    try { return JSON.parse(localStorage.getItem('branding_json')||'null') || null; } catch(e){ return null; }
+  }
+  const b = readBrand(); if(!b) return;
+  const root = document.documentElement;
+  const THEMES = {
+    pastel: {
+      "--bg-gradient":"linear-gradient(145deg,#edf3f0,#ece9f6,#fff0e6)",
+      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#17B26A",
+      "--mint":"#C8E3D2","--lav":"#D7CEF0","--peach":"#FFD8B8"
+    },
+    glass: {
+      "--bg-gradient":"linear-gradient(135deg,#f8fafc,#eef2ff)",
+      "--card":"#ffffffcc","--ink":"#0f172a","--muted":"#475569","--primary":"#2563eb",
+      "--mint":"#e2e8f0","--lav":"#e9d5ff","--peach":"#ffedd5"
+    },
+    neo: {
+      "--bg-gradient":"linear-gradient(135deg,#f3f4f6,#fafafa)",
+      "--card":"#ffffff","--ink":"#111827","--muted":"#6b7280","--primary":"#10b981",
+      "--mint":"#d1fae5","--lav":"#ede9fe","--peach":"#ffe4e6"
+    },
+    iphone: {
+      "--bg-gradient":"linear-gradient(180deg,#fdf2f8,#eff6ff)",
+      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#0ea5e9",
+      "--mint":"#e0f2fe","--lav":"#e9d5ff","--peach":"#ffe4e6"
+    }
+  };
+  const theme = THEMES[b.theme || 'pastel'];
+  if(theme){
+    Object.entries(theme).forEach(([k,v])=> root.style.setProperty(k, v));
+  }
+  // Swap logos and banners wherever present
+  const logoUrl = b.logoUrl || "";
+  const banUrl  = b.bannerUrl || "";
+  if(logoUrl){
+    document.querySelectorAll('img#logo, img#ph_logo, img.logo').forEach(el=> el.src = logoUrl);
+  }
+  if(banUrl){
+    document.querySelectorAll('#hdrBanner, .banner img, img[alt*="Banner"]').forEach(el=> el.src = banUrl);
+  }
+  // Titles
+  if(b.clinicName) { const el=document.getElementById('clinicTitle'); if(el) el.textContent=b.clinicName; }
+  if(b.pharmacyName){ const el=document.getElementById('ph_name'); if(el) el.textContent=b.pharmacyName; }
+})();
+</script>
+</body>
+</html>
