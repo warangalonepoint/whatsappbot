@@ -6,8 +6,9 @@
   <title>Sales · Pharmacy · Clinic PWA</title>
 
   <!-- Dexie BEFORE db.js -->
-  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
-  <script src="./scripts/db.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js">
+  <!-- align with OPD/live -->
+  <script src="./scripts/db.js?v=11"></script>
 
   <link rel="manifest" href="./manifest.json"/>
 
@@ -182,6 +183,28 @@
     <div id="msg" class="hint" style="margin-top:6px"></div>
   </div>
 
+  <!-- OPD Rx Cart (park incoming prescriptions here) -->
+  <div class="card" style="background:#F8FAFC;border:1px solid #e5e7eb">
+    <div class="row" style="align-items:center;justify-content:space-between">
+      <div class="hint"><b>OPD Rx Cart</b> — incoming prescriptions park here. Review, then add to bill.</div>
+      <div class="right">
+        <button class="btn" id="btnAddAllCart" title="Add all parked Rx to current bill">Add ALL to Bill</button>
+      </div>
+    </div>
+    <table class="table" id="rxCartTbl">
+      <thead>
+        <tr>
+          <th style="width:120px">Date/Time</th>
+          <th>Patient</th>
+          <th>PID</th>
+          <th>Items</th>
+          <th style="width:240px">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
   <div class="footer">© 2025 <strong>Powered by Onestop AI Services</strong> · All Rights Reserved</div>
 </div>
 
@@ -217,9 +240,9 @@ window.addEventListener('storage', e=>{ if(e.key==='branding_touch') loadBrandin
 /* -----------------------------------------------------------
    DB / helpers
 ----------------------------------------------------------- */
-const DB = window.DB || new Dexie('onesystem_clinic');
-if(!window.DB){ DB.version(1).stores({settings:'key',patients:'++id,pid,phone,name',bookings:'++id,date,pid,tokenNo',sales:'++id,date,source,mode',}); }
-const dbReady = DB.open?.() || Promise.resolve();
+const DBH = window.DB || new Dexie('onesystem_clinic');
+if(!window.DB){ DBH.version(1).stores({settings:'key',patients:'++id,pid,phone,name',bookings:'++id,date,pid,tokenNo',sales:'++id,date,source,mode'}); }
+const dbReady = DBH.open?.() || Promise.resolve();
 
 const $ = s => document.querySelector(s);
 const money = n => (+n||0).toFixed(2);
@@ -228,6 +251,8 @@ function readLS(k,f){ try{ return JSON.parse(localStorage.getItem(k)||'null') ??
 function writeLS(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
 const eqi=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();
 const toExp = mmYY => { const [m,y]=String(mmYY||'').split('/').map(n=>parseInt(n,10)); return new Date(2000+(y||0),((m||1)-1),1); };
+const localISODate = (dLike)=>{ const d=new Date(dLike); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const todayLocal = ()=> localISODate(new Date());
 
 /* Stock + Bill state */
 let STOCK=[], SALE=[], LAST_SAVED=null;
@@ -353,7 +378,6 @@ window.editBatch=(i,v)=>{ SALE[i].batch=v; render(); };
 window.editExp =(i,v)=>{ SALE[i].exp=v; render(); };
 window.editHSN =(i,v)=>{ SALE[i].hsn=v||'3004'; render(); };
 window.editQty =(i,v)=>{ const newQ=+v||1; const diff=newQ-(+SALE[i].qty||0);
-  // Adjust stock live (simple: if increasing qty, try to consume same batch; if decreasing, return)
   const back=STOCK.find(s=>eqi(s.name,SALE[i].name)&&eqi(s.batch,SALE[i].batch)&&s.exp===SALE[i].exp);
   if(diff>0){
     if(!back || (+back.qty||0)<diff){ alert('Insufficient stock'); return render(); }
@@ -399,7 +423,6 @@ function saveInvoice(){
 }
 
 function printBill(){
-  // Prefer last saved bill to keep printed ID stable
   let data = readLS('last_sale_bill', null);
   if(!data){
     if(!ensureBill()) return;
@@ -417,7 +440,6 @@ function waTextFromBill(bill){
   return encodeURIComponent([header,'',...lines,'',totals].join('\n'));
 }
 function whatsappBill(){
-  // Save first if no saved bill
   let bill = readLS('last_sale_bill', null);
   if(!bill){
     if(!ensureBill()) return;
@@ -433,94 +455,185 @@ $('#btnPrint').addEventListener('click', printBill);
 $('#btnWA').addEventListener('click', whatsappBill);
 
 /* -----------------------------------------------------------
-   OPD Rx import queue (DB.sales: {source:'opd', mode:'pending'})
+   OPD Rx queue → PARK IN CART (Dexie v11 + legacy LS fallback)
 ----------------------------------------------------------- */
-async function listPendingRx(){
+let RX_CART = readLS('rx_cart_json', []); // [{id, date, pid, patientName, patientPhone, items:[], source:'dexie'|'legacy', _dexieRow, _legacyTs}]
+function saveCart(){ writeLS('rx_cart_json', RX_CART); }
+function fmtDT(x){ const d=new Date(x||Date.now()); return d.toLocaleString(); }
+
+/* pull OPD pending rows from Dexie (today by local date) */
+async function listPendingRxDexie(){
   await dbReady;
   try{
-    const all = await DB.sales?.toArray?.() || [];
-    const today = new Date().toISOString().slice(0,10);
-    return all.filter(r => (r.source==='opd') && (r.mode==='pending') && String(r.date||'').slice(0,10)===today);
+    const all = await DBH.sales?.toArray?.() || [];
+    const today = todayLocal();
+    return all.filter(r =>
+      (r.source==='opd') &&
+      (r.mode==='pending') &&
+      localISODate(r.date||r.createdAt||new Date()) === today
+    );
   }catch{ return []; }
 }
-async function markPulled(idOrObj){
-  try{
-    if(idOrObj?.id!=null) await DB.sales.update(idOrObj.id, {mode:'pulled', updatedAt:new Date().toISOString()});
-  }catch{}
+
+/* legacy LS queue (for old OPD tabs) */
+function listLegacyQueue(){
+  let arr=[]; try{arr=JSON.parse(localStorage.getItem('pharma_rx_queue')||'[]');}catch{}
+  return Array.isArray(arr)? arr: [];
 }
+function setLegacyQueue(arr){ localStorage.setItem('pharma_rx_queue', JSON.stringify(arr)); }
+
+/* best batch pool for a drug name (keeps FEFO) */
 function bestPoolForDrug(name){
   const nm=(name||'').toLowerCase();
-  const pool = STOCK.filter(s => (s.name||'').toLowerCase().includes(nm));
-  return pool;
+  return STOCK.filter(s => (s.name||'').toLowerCase().includes(nm));
 }
-async function importOneRxRow(rx, patient){
-  const qty = 1; // conservative default (pharmacist adjusts)
-  const pool = bestPoolForDrug(rx.drug||rx.name||'');
+
+/* move one Rx line into current bill (FEFO, qty=1 default) */
+async function addRxLineToBill(rxLine){
+  const qty = +rxLine.qty || 1;
+  const pool = bestPoolForDrug(rxLine.drug||rxLine.name||'');
   if(pool.length){
     addFromPool(pool, qty, '3004');
   }else{
-    // placeholder row (no stock): still append so bill captures it; mrp 0
-    SALE.push({ name: rx.drug||rx.name||'[No stock match]', pack:'', batch:'', exp:'', hsn:'3004', qty:1, mrp:0 });
+    SALE.push({ name: rxLine.drug||rxLine.name||'[No stock match]', pack:'', batch:'', exp:'', hsn:'3004', qty, mrp:0 });
     render();
   }
-  if(patient && !$('#buyer').value){ $('#buyer').value = patient.pid || patient.name || 'Walk-in'; }
 }
-async function importPendingRx(auto=false){
-  const pending = await listPendingRx();
-  // Update badge
-  $('#rxBadge').style.display = pending.length? 'inline-flex':'none';
-  $('#rxCount').textContent = String(pending.length);
-  if(!pending.length) return;
 
-  if(!auto){
-    // Manual click: import all
-    for(const r of pending){
-      const ptName = r.patientName || r.name || '';
-      if(ptName && !$('#buyer').value) $('#buyer').value = ptName;
-      const items = Array.isArray(r.items)? r.items : [];
-      for(const it of items){ await importOneRxRow(it, {name:ptName, pid:r.pid}); }
-      await markPulled(r);
-    }
-    msg('Imported OPD Rx into current bill');
-    return;
+/* actions from cart */
+async function addCartRowToBill(ix){
+  const row = RX_CART[ix]; if(!row) return;
+  if(row.patientName && !$('#buyer').value) $('#buyer').value = row.patientName;
+  for(const it of (row.items||[])){ await addRxLineToBill(it); }
+  // mark pulled/consumed at the source
+  if(row.source==='dexie' && row._dexieRow?.id!=null){
+    try{ await DBH.sales.update(row._dexieRow.id, {mode:'pulled', updatedAt:new Date().toISOString()}); }catch{}
   }
+  if(row.source==='legacy' && row._legacyTs){
+    const q=listLegacyQueue().filter(o=>o.ts!==row._legacyTs);
+    setLegacyQueue(q);
+  }
+  RX_CART.splice(ix,1); saveCart(); renderCart(); msg('Imported Rx from cart');
+}
+async function addAllCartToBill(){
+  const snapshot = RX_CART.slice();
+  for(const r of snapshot){
+    const rowIx = RX_CART.findIndex(x=>x.id===r.id);
+    if(rowIx>=0) await addCartRowToBill(rowIx);
+  }
+}
+function dismissCartRow(ix){
+  const row = RX_CART[ix]; if(!row) return;
+  if(row.source==='dexie' && row._dexieRow?.id!=null){
+    DBH.sales.update(row._dexieRow.id, {mode:'pulled', updatedAt:new Date().toISOString()}).catch(()=>{});
+  }
+  if(row.source==='legacy' && row._legacyTs){
+    const q=listLegacyQueue().filter(o=>o.ts!==row._legacyTs);
+    setLegacyQueue(q);
+  }
+  RX_CART.splice(ix,1); saveCart(); renderCart();
+}
 
-  // Auto-import (respect toggle)
-  if(!$('#autoImport').checked) return;
-
-  for(const r of pending){
-    const ptName = r.patientName || r.name || '';
+/* render cart */
+function renderCart(){
+  const tb = $('#rxCartTbl tbody'); tb.innerHTML='';
+  RX_CART.sort((a,b)=> String(a.date||'').localeCompare(String(b.date||'')));
+  RX_CART.forEach((r,i)=>{
     const items = Array.isArray(r.items)? r.items : [];
-    if(ptName && !$('#buyer').value) $('#buyer').value = ptName;
-    for(const it of items){ await importOneRxRow(it, {name:ptName, pid:r.pid}); }
-    await markPulled(r);
+    const list = items.map(x=> x.drug||x.name||'-').join(', ');
+    tb.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${fmtDT(r.date)}</td>
+        <td>${r.patientName||''} <span class="pill">${(r.patientPhone||'').slice(-10)}</span></td>
+        <td>${r.pid||''}</td>
+        <td>${list}</td>
+        <td>
+          <div class="row" style="gap:6px">
+            <button class="btn primary" onclick="addCartRowToBill(${i})">Add to Bill</button>
+            <button class="btn" onclick="dismissCartRow(${i})">Dismiss</button>
+          </div>
+        </td>
+      </tr>
+    `);
+  });
+  document.getElementById('rxBadge').style.display = (RX_CART.length? 'inline-flex':'none');
+  document.getElementById('rxCount').textContent = String(RX_CART.length);
+}
+window.addCartRowToBill = addCartRowToBill;
+window.dismissCartRow = dismissCartRow;
+document.getElementById('btnAddAllCart').addEventListener('click', addAllCartToBill);
+
+/* park new pending into RX_CART (merge Dexie + legacy without duplicates) */
+async function parkPendingIntoCart(){
+  const dexieRows = await listPendingRxDexie();
+  const legacyRows = listLegacyQueue();
+
+  const seen = new Set(RX_CART.map(x=>x.id));
+
+  // Dexie rows
+  for(const r of dexieRows){
+    const id = (r.id!=null) ? 'dexie:'+r.id : 'dexie:'+String(r.date||'')+':'+(r.pid||'');
+    if(seen.has(id)) continue;
+    RX_CART.push({
+      id,
+      date: r.date || new Date().toISOString(),
+      pid: r.pid || '',
+      patientName: r.patientName || r.name || '',
+      patientPhone: r.patientPhone || r.phone || '',
+      items: Array.isArray(r.items)? r.items : [],
+      source:'dexie',
+      _dexieRow: r
+    });
+    seen.add(id);
   }
-  msg('Auto-imported OPD Rx');
+
+  // Legacy rows (keep until consumed/dismissed)
+  for(const o of legacyRows){
+    const id = 'legacy:'+ (o.ts || (o.pid||'')+'|'+(o.name||'')+'|'+(o.items||[]).length);
+    if(seen.has(id)) continue;
+    RX_CART.push({
+      id,
+      date: o.ts? new Date(o.ts).toISOString() : new Date().toISOString(),
+      pid: o.pid || '',
+      patientName: o.name || '',
+      patientPhone: o.phone || '',
+      items: Array.isArray(o.items)? o.items : [],
+      source:'legacy',
+      _legacyTs: o.ts || null
+    });
+    seen.add(id);
+  }
+
+  saveCart();
+  renderCart();
 }
 
-/* ===== Real-time listeners (instant pickup when OPD posts) ===== */
+/* manual button imports ALL cart rows into bill */
+document.getElementById('btnImportRx').addEventListener('click', ()=> addAllCartToBill());
+
+/* ===== Real-time listeners (shared clinic bus + storage) ===== */
 try{
   if('BroadcastChannel' in window){
-    const ch = new BroadcastChannel('pharmacy_rx');
-    ch.onmessage = (e)=>{
-      if(e?.data?.type === 'pharmacy_rx'){
-        importPendingRx(true);
+    const clinicBus = new BroadcastChannel('clinic-queue-sync-v1');
+    clinicBus.onmessage = (e)=>{
+      if(e?.data?.type === 'pharmacy_rx_enqueued'){
+        parkPendingIntoCart();
       }
     };
   }
 }catch{}
 
 window.addEventListener('storage', (e)=>{
-  if(e.key === 'sales_touch'){ importPendingRx(true); }
+  if(e.key === 'sales_touch' || e.key === 'pharma_rx_queue'){ parkPendingIntoCart(); }
 });
 
-/* light watchers: focus + 30s */
+/* light pollers */
 let _rxTick=null;
 function startRxWatcher(){
   if(_rxTick) clearInterval(_rxTick);
-  _rxTick = setInterval(()=>importPendingRx(true), 30000);
+  _rxTick = setInterval(()=>parkPendingIntoCart(), 30000);
 }
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') importPendingRx(true); });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') parkPendingIntoCart(); });
 
 /* -----------------------------------------------------------
    Shortcuts
@@ -542,18 +655,16 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   await loadBranding();
   loadStock(); render();
 
-  // Try preload buyer from last OPD-pushed sale (if any pulled but not billed yet)
+  // preload buyer if any pulled Rx exists
   try{
-    const pulled = (await DB.sales.toArray()).filter(r=>r.source==='opd' && r.mode==='pulled').sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+    const pulled = (await DBH.sales.toArray()).filter(r=>r.source==='opd' && r.mode==='pulled').sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
     if(pulled[0]?.patientName && !$('#buyer').value) $('#buyer').value = pulled[0].patientName;
   }catch{}
 
-  // Initial Rx check, then watchers
-  importPendingRx(true);
+  // First render of cart (persisted) then park any fresh pending
+  renderCart();
+  parkPendingIntoCart();
   startRxWatcher();
-
-  // Buttons
-  $('#btnImportRx').addEventListener('click', ()=>importPendingRx(false));
 });
 </script>
 </body>
