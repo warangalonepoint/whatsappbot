@@ -1,4 +1,3 @@
-<script>
 /* db.js — onesystem_clinic · v11 (adds queue bridges)
    - Single source of truth for Dexie schema and light utilities
    - Safe to include on all pages (Admin, Bookings, OPD, Pharmacy, Lab, etc.)
@@ -196,11 +195,7 @@
   };
 
   // ---------- NEW: Queue bridges ----------
-  /**
-   * Enqueue an OPD prescription for Pharmacy.
-   * This is exactly what sales.html polls:
-   *   DB.sales where {source:'opd', mode:'pending'} and date === today
-   */
+  /** Enqueue an OPD prescription for Pharmacy. */
   DB.enqueuePharmacyRx = async function({ pid, patientName, patientPhone, items }){
     try{ await DB.ensureOpen(); }catch{}
     const dateStr = isoNow();
@@ -217,7 +212,6 @@
     try{
       const id = await DB.sales.add(row);
       DB._log('enqueuePharmacyRx → sales.id', id);
-      // light nudge for other tabs
       lsTouch('sales_touch');
       DB.bus.ping('pharmacy_rx_enqueued', {id, pid: row.pid});
       return {ok:true, id};
@@ -227,11 +221,7 @@
     }
   };
 
-  /**
-   * Enqueue Lab Orders for Lab Tests page.
-   * Primary queue is localStorage key 'lab_orders_queue' (used by lab-tests.html).
-   * We also mirror to Dexie.lab_orders for audit/records.
-   */
+  /** Enqueue Lab Orders (localStorage queue mirrored to Dexie). */
   DB.enqueueLabOrder = async function({ pid, name, phone, tokenRef, items, source='opd' }){
     const QKEY = 'lab_orders_queue';
     const order = {
@@ -245,14 +235,10 @@
       updatedAt: isoNow(),
       items: Array.isArray(items)? items: []
     };
-
-    // 1) LocalStorage queue (what lab-tests.html uses)
     const q = lsGet(QKEY, []);
     q.push(order);
     lsSet(QKEY, q);
-    lsTouch(QKEY+'_touch'); // optional hint
-
-    // 2) Dexie mirror for audit / future dashboards
+    lsTouch(QKEY+'_touch');
     try{
       await DB.ensureOpen();
       const id = await DB.lab_orders.add(order);
@@ -260,7 +246,6 @@
     }catch(e){
       DB._log('enqueueLabOrder (mirror) failed', e);
     }
-
     DB.bus.ping('lab_order_enqueued', {pid: order.pid});
     return {ok:true};
   };
@@ -272,6 +257,5 @@
   window.DB = DB;
 
   // Eager open (safe if already open)
-  DB.ensureOpen().catch(()=>{ /* swallow — pages may open lazily */ });
+  DB.ensureOpen().catch(()=>{ /* swallow */ });
 })();
-</script>
