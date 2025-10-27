@@ -6,7 +6,7 @@
   <title>Sales · Pharmacy · Clinic PWA</title>
 
   <!-- Dexie BEFORE db.js -->
-  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js">
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
   <!-- align with OPD/live -->
   <script src="./scripts/db.js?v=11"></script>
 
@@ -98,7 +98,28 @@
 
   <!-- Wide Sale Builder -->
   <div class="card" style="background:#D6E5DD">
+    <!-- NEW: Walk-in customer details (does not affect theme/UI look) -->
     <div class="row" style="align-items:end">
+      <div style="flex:1 1 220px">
+        <label>Customer Name (Walk-in)</label>
+        <input id="custName" class="input" placeholder="e.g., Ramesh Kumar">
+      </div>
+      <div style="flex:0 0 160px">
+        <label>Phone</label>
+        <input id="custPhone" class="input" maxlength="10" inputmode="numeric" placeholder="10-digit"
+               oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
+      </div>
+      <div style="flex:2 1 320px">
+        <label>Address</label>
+        <input id="custAddr" class="input" placeholder="Street, Area, City">
+      </div>
+      <div style="flex:1 1 220px">
+        <label>Doctor Name</label>
+        <input id="custDoctor" class="input" placeholder="Optional">
+      </div>
+    </div>
+
+    <div class="row" style="align-items:end;margin-top:8px">
       <div style="flex:1 1 280px">
         <label>Buyer / PID</label>
         <input id="buyer" class="input" placeholder="Walk-in / auto-filled from OPD">
@@ -254,10 +275,27 @@ const toExp = mmYY => { const [m,y]=String(mmYY||'').split('/').map(n=>parseInt(
 const localISODate = (dLike)=>{ const d=new Date(dLike); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const todayLocal = ()=> localISODate(new Date());
 
+/* Bill mode/state */
+let BILL_MODE = 'walkin';        // 'walkin' | 'opd'
+let CURRENT_OPD = null;          // {pid, patientName, patientPhone, tokenRef?, doctorName?}
+
 /* Stock + Bill state */
 let STOCK=[], SALE=[], LAST_SAVED=null;
 function loadStock(){ STOCK = readLS('pharma_stock_json', []); }
 function persistStock(){ writeLS('pharma_stock_json', STOCK); }
+
+/* -----------------------------------------------------------
+   Sync buyer display with walk-in details (non-invasive)
+----------------------------------------------------------- */
+function syncBuyerFromWalkin(){
+  if(BILL_MODE!=='walkin') return; // do not override OPD buyer
+  const n = ($('#custName').value||'').trim();
+  const p = ($('#custPhone').value||'').replace(/\D/g,'');
+  $('#buyer').value = n ? (p? `${n} (${p})` : n) : (p? p : '');
+}
+['custName','custPhone'].forEach(id=>{
+  document.addEventListener('input', (e)=>{ if(e.target && e.target.id===id) syncBuyerFromWalkin(); });
+});
 
 /* -----------------------------------------------------------
    Search / suggestions
@@ -320,6 +358,9 @@ function addItemManual(){
 $('#btnAdd').addEventListener('click', addItemManual);
 
 /* remove / clear */
+function resetModeToWalkin(){
+  BILL_MODE='walkin'; CURRENT_OPD=null;
+}
 function removeLine(ix){
   const r=SALE[ix]; if(!r) return;
   const back=STOCK.find(s=>eqi(s.name,r.name)&&eqi(s.batch,r.batch)&&s.exp===r.exp);
@@ -332,6 +373,7 @@ $('#btnClear').addEventListener('click', ()=>{
     if(back){ back.qty=(+back.qty||0)+(+r.qty||0); }
   });
   SALE=[]; persistStock(); render();
+  resetModeToWalkin();
 });
 
 /* -----------------------------------------------------------
@@ -395,8 +437,19 @@ window.editMRP =(i,v)=>{ SALE[i].mrp=+v||0; render(); };
 function bumpSalesToday(){ const k='pharma_sales_today'; const cur=parseInt(localStorage.getItem(k)||'0',10); localStorage.setItem(k, String(isNaN(cur)?1:(cur+1))); try{ localStorage.setItem('sales_touch', String(Date.now())); }catch{} }
 function ensureBill(){ if(!SALE.length){ alert('Add items first'); return false; } return true; }
 
+function clinicName(){ try{ return (JSON.parse(localStorage.getItem('branding_json')||'{}').pharmacyName) || (JSON.parse(localStorage.getItem('branding_json')||'{}').clinicName) || 'Your Pharmacy'; }catch{return 'Your Pharmacy';} }
+
 function buildInvoiceObject(saveId=null){
-  const buyer=$('#buyer').value||'Walk-in';
+  // derive buyer string by mode
+  let buyerText='';
+  if(BILL_MODE==='opd' && CURRENT_OPD){
+    buyerText = CURRENT_OPD.patientName || CURRENT_OPD.pid || 'OPD Patient';
+  }else{
+    const n=($('#custName').value||'').trim();
+    const p=($('#custPhone').value||'').replace(/\D/g,'');
+    buyerText = n ? (p? `${n} (${p})` : n) : (p || 'Walk-in');
+  }
+
   const now=new Date();
   const id = saveId || ('DM' + now.getTime().toString().slice(-6));
   const sub=+$('#subTotal').textContent||0;
@@ -404,10 +457,27 @@ function buildInvoiceObject(saveId=null){
   const sgst=+$('#sgst').textContent||0;
   const cgst=+$('#cgst').textContent||0;
   const total=+$('#netTotal').textContent||0;
-  return {
-    id, buyer, total, subTotal:sub, discountPct:disc, sgst, cgst,
-    items: SALE.slice(), date: now.toISOString(), payMode: $('#payMode').value, payRef: $('#payRef').value
+
+  const base = {
+    id, buyer: buyerText, total, subTotal:sub, discountPct:disc, sgst, cgst,
+    items: SALE.slice(), date: now.toISOString(), payMode: $('#payMode').value, payRef: $('#payRef').value,
+    mode: BILL_MODE
   };
+
+  if(BILL_MODE==='opd' && CURRENT_OPD){
+    base.pid = CURRENT_OPD.pid || '';
+    base.tokenRef = CURRENT_OPD.tokenRef || '';
+    base.patientName = CURRENT_OPD.patientName || '';
+    base.patientPhone = CURRENT_OPD.patientPhone || '';
+    if (CURRENT_OPD.doctorName) base.doctorName = CURRENT_OPD.doctorName;
+  }else{
+    base.customerName = ($('#custName').value||'').trim();
+    base.customerPhone = ($('#custPhone').value||'').replace(/\D/g,'');
+    base.customerAddress = ($('#custAddr').value||'').trim();
+    const dnm = ($('#custDoctor').value||'').trim();
+    if (dnm) base.doctorName = dnm;
+  }
+  return base;
 }
 
 function saveInvoice(){
@@ -432,12 +502,27 @@ function printBill(){
   window.open('./print/print-sales.html?print=1','_blank');
 }
 
-function clinicName(){ try{ return (JSON.parse(localStorage.getItem('branding_json')||'{}').pharmacyName) || (JSON.parse(localStorage.getItem('branding_json')||'{}').clinicName) || 'Your Pharmacy'; }catch{return 'Your Pharmacy';} }
 function waTextFromBill(bill){
-  const header = `*${clinicName()}*\nInvoice: ${bill.id}\nDate: ${new Date(bill.date).toLocaleString()}\nPay: ${bill.payMode}${bill.payRef? ' ('+bill.payRef+')':''}\nBuyer: ${bill.buyer}`;
+  const header = `*${clinicName()}*`+
+    `\nInvoice: ${bill.id}`+
+    `\nDate: ${new Date(bill.date).toLocaleString()}`+
+    `\nPay: ${bill.payMode}${bill.payRef? ' ('+bill.payRef+')':''}`;
+
+  let who='';
+  if(bill.mode==='opd'){
+    who = `\nPatient: ${bill.patientName || bill.pid}` +
+          (bill.pid? `\nPID: ${bill.pid}` : '') +
+          (bill.tokenRef? `\nToken: ${bill.tokenRef}` : '');
+  }else{
+    who = `\nCustomer: ${bill.customerName || bill.buyer}` +
+          (bill.customerPhone? `\nPhone: ${bill.customerPhone}` : '') +
+          (bill.customerAddress? `\nAddr: ${bill.customerAddress}` : '');
+  }
+  if(bill.doctorName) who += `\nDoctor: ${bill.doctorName}`;
+
   const lines = bill.items.map((r,i)=>`${i+1}. ${r.name} x${r.qty} @ ${money(r.mrp)} = ${money(r.qty*r.mrp)}`);
   const totals = `Subtotal: ${money(bill.subTotal)}\nDiscount: ${bill.discountPct}%\nSGST 2.5%: ${money(bill.sgst)}\nCGST 2.5%: ${money(bill.cgst)}\n*Net Total: ${money(bill.total)}*`;
-  return encodeURIComponent([header,'',...lines,'',totals].join('\n'));
+  return encodeURIComponent([header, who, '', ...lines, '', totals].join('\n'));
 }
 function whatsappBill(){
   let bill = readLS('last_sale_bill', null);
@@ -445,8 +530,15 @@ function whatsappBill(){
     if(!ensureBill()) return;
     saveInvoice(); bill = readLS('last_sale_bill', null);
   }
-  const phoneGuess = (bill && bill.buyer && /^\d{10}$/.test(bill.buyer.replace(/\D/g,''))) ? bill.buyer.replace(/\D/g,'') : '';
-  const url = phoneGuess ? `https://wa.me/91${phoneGuess}?text=${waTextFromBill(bill)}` : `https://wa.me/?text=${waTextFromBill(bill)}`;
+  let phoneGuess='';
+  if(bill.mode==='opd'){
+    phoneGuess = (bill.patientPhone||'').replace(/\D/g,'');
+  }else{
+    phoneGuess = (bill.customerPhone||'').replace(/\D/g,'');
+  }
+  const url = (phoneGuess && /^\d{10}$/.test(phoneGuess))
+    ? `https://wa.me/91${phoneGuess}?text=${waTextFromBill(bill)}`
+    : `https://wa.me/?text=${waTextFromBill(bill)}`;
   window.open(url,'_blank');
 }
 
@@ -503,8 +595,24 @@ async function addRxLineToBill(rxLine){
 /* actions from cart */
 async function addCartRowToBill(ix){
   const row = RX_CART[ix]; if(!row) return;
-  if(row.patientName && !$('#buyer').value) $('#buyer').value = row.patientName;
+
+  // Switch to OPD mode and pin patient context
+  BILL_MODE='opd';
+  CURRENT_OPD = {
+    pid: row.pid || '',
+    patientName: row.patientName || '',
+    patientPhone: row.patientPhone || '',
+    tokenRef: row.tokenRef || '',
+    doctorName: row.doctorName || ''
+  };
+
+  // reflect in buyer display (non-invasive)
+  if(CURRENT_OPD.patientName || CURRENT_OPD.pid){
+    $('#buyer').value = CURRENT_OPD.patientName || CURRENT_OPD.pid;
+  }
+
   for(const it of (row.items||[])){ await addRxLineToBill(it); }
+
   // mark pulled/consumed at the source
   if(row.source==='dexie' && row._dexieRow?.id!=null){
     try{ await DBH.sales.update(row._dexieRow.id, {mode:'pulled', updatedAt:new Date().toISOString()}); }catch{}
@@ -580,6 +688,8 @@ async function parkPendingIntoCart(){
       pid: r.pid || '',
       patientName: r.patientName || r.name || '',
       patientPhone: r.patientPhone || r.phone || '',
+      tokenRef: r.tokenRef || '',
+      doctorName: r.doctorName || '',
       items: Array.isArray(r.items)? r.items : [],
       source:'dexie',
       _dexieRow: r
@@ -665,6 +775,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderCart();
   parkPendingIntoCart();
   startRxWatcher();
+
+  // initial buyer sync for walk-in fields
+  syncBuyerFromWalkin();
 });
 </script>
 </body>
