@@ -11,7 +11,13 @@
 
   <!-- (Optional) QR local first, CDN fallback -->
   <script src="./scripts/qrcode.min.js"></script>
-  <script> if(!window.QRCode){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';document.head.appendChild(s);} </script>
+  <script>
+    if(!window.QRCode){
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+      document.head.appendChild(s);
+    }
+  </script>
 
   <style>
     :root{
@@ -192,14 +198,43 @@ const ageParts=d=>{ if(!d) return {y:0,m:0,d:0,months:0,text:''}; const a=new Da
 const ageStr=d=>ageParts(d).text;
 function toast(t,ok=true){ const el=$('#opdMsg'); if(!el) return; el.className=ok?'ok':'err'; el.textContent=t; el.style.display='inline-block'; setTimeout(()=>{ el.style.display='none'; }, 1600); }
 
-/* ===== Branding ===== */
-async function loadBranding(){
-  try{ await DB.open?.(); }catch{}
-  let b=null; try{ b=(await DB.settings?.get?.('branding'))?.val||null; }catch{}
-  if(!b){ try{ b=JSON.parse(localStorage.getItem('branding_json')||'null'); }catch{} }
-  document.getElementById('hdrLogo').src   = b?.logoUrl   || './assets/logo.png';
-  document.getElementById('hdrBanner').src = b?.bannerUrl || './assets/banner.png';
+/* ===== QR (PID only) ===== */
+function generateQR(pidText){
+  const box = document.getElementById('qrBox');
+  if(!box) return;
+  box.innerHTML = '';
+  const txt = String(pidText||'').trim();
+  if(!txt || !window.QRCode) return;
+  try{ new QRCode(box, { text: txt, width: 110, height: 110, correctLevel: QRCode.CorrectLevel.M }); }catch{}
 }
+
+const THEMES = {
+  pastel: {'--bg-gradient':'linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec)','--mint':'#E8F6ED','--lav':'#F0EAFE','--peach':'#FFF3E8','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#17B26A'},
+  glass:  {'--bg-gradient':'linear-gradient(135deg,#eef2ff,#ecfeff,#fef9c3)','--mint':'#E0F2FE','--lav':'#E9D5FF','--peach':'#FFE4E6','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#0EA5E9'},
+  neo:    {'--bg-gradient':'linear-gradient(145deg,#f1f5f9,#e2e8f0,#f8fafc)','--mint':'#E2F7EC','--lav':'#EDE9FE','--peach':'#FFEAD5','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#111827'},
+  iphone: {'--bg-gradient':'linear-gradient(180deg,#f7f7f7,#f0f0f0)','--mint':'#E6F4EA','--lav':'#EEE7FF','--peach':'#FFE7D6','--card':'#fff','--ink':'#111','--muted':'#4b5563','--primary':'#0A84FF'}
+};
+function applyTheme(name){
+  const m = THEMES[name] || THEMES.pastel;
+  const root = document.documentElement;
+  Object.entries(m).forEach(([k,v])=> root.style.setProperty(k,v));
+}
+function applyBranding(b){
+  applyTheme(b.theme||'pastel');
+  document.getElementById('hdrLogo').src   = b.logoUrl || '../assets/logo.png';
+  document.getElementById('hdrBanner').src = b.bannerUrl || '../assets/banner.png';
+  document.documentElement.style.setProperty('--banner-h',  `${Number(b.bannerH||160)}px`);
+  document.documentElement.style.setProperty('--banner-fit', b.bannerFit||'contain');
+}
+function readLSBranding(){ try{ return JSON.parse(localStorage.getItem('branding_json')||'null')||null; }catch{ return null; } }
+async function loadBranding(){
+  let b=null;
+  try{ await DB.open?.(); b = await DB.settings?.get?.('branding'); b = b?.val || b?.value || null; }catch{}
+  if(!b) b = readLSBranding() || {};
+  applyBranding(b);
+}
+window.addEventListener('storage', (e)=>{ if(e.key==='branding_touch') loadBranding(); });
+
 
 /* ===== DB handle ===== */
 const DBH = window.DB;
@@ -221,11 +256,29 @@ async function loadPatientByKeys(pid, phone){
   let p=null; if(pid) p=await DBH.patients.where('pid').equals(pid).first();
   if(!p && phone) p=await DBH.patients.where('phone').equals(phone).first();
   if(!p) return null;
-  $('#pid').value=p.pid||''; $('#name').value=p.name||p.patientName||''; $('#phone').value=p.phone||''; $('#dob').value=p.dob||''; $('#age').value=p.dob?ageStr(p.dob):''; $('#gender').value=p.gender||'Male'; return p;
+  $('#pid').value=p.pid||''; $('#name').value=p.name||p.patientName||''; $('#phone').value=p.phone||''; $('#dob').value=p.dob||''; $('#age').value=p.dob?ageStr(p.dob):''; $('#gender').value=p.gender||'Male';
+  // QR for PID only
+  generateQR($('#pid').value);
+  return p;
 }
-$('#btnLoad').onclick=async()=>{ const p=await loadPatientByKeys(($('#loadPID').value||'').trim().toUpperCase(), ($('#loadPhone').value||'').trim()); if(!p){ toast('No patient found',false); return; } populateTokensDropdown($('#pid').value); toast('Loaded'); };
+$('#btnLoad').onclick=async()=>{
+  const p=await loadPatientByKeys(($('#loadPID').value||'').trim().toUpperCase(), ($('#loadPhone').value||'').trim());
+  if(!p){ toast('No patient found',false); return; }
+  populateTokensDropdown($('#pid').value);
+  toast('Loaded');
+};
 $('#loadPID').addEventListener('input',e=>populateTokensDropdown(e.target.value));
-$('#btnUseToken').onclick=async()=>{ const tok=$('#loadTokenSel').value; if(!tok) return; const today=todayISO(); const rows=await DBH.bookings.where('date').equals(today).toArray(); const hit=rows.find(b=>String(b.tokenNo??b.token??'')===String(tok) && ACTIVE.has(String(b.status||'').toLowerCase())); if(!hit) return toast('Token not found',false); $('#pid').value=(hit.pid||'').toUpperCase(); $('#name').value=hit.name||hit.patientName||''; $('#phone').value=hit.phone||''; $('#gender').value=hit.gender||'Male'; $('#dob').value=hit.dob||''; $('#age').value=hit.dob?ageStr(hit.dob):(hit.age||''); $('#token').value=String(hit.tokenNo??hit.token??''); toast(`Loaded token #${tok}`); };
+$('#btnUseToken').onclick=async()=>{
+  const tok=$('#loadTokenSel').value; if(!tok) return;
+  const today=todayISO();
+  const rows=await DBH.bookings.where('date').equals(today).toArray();
+  const hit=rows.find(b=>String(b.tokenNo??b.token??'')===String(tok) && ACTIVE.has(String(b.status||'').toLowerCase()));
+  if(!hit) return toast('Token not found',false);
+  $('#pid').value=(hit.pid||'').toUpperCase(); $('#name').value=hit.name||hit.patientName||''; $('#phone').value=hit.phone||''; $('#gender').value=hit.gender||'Male'; $('#dob').value=hit.dob||''; $('#age').value=hit.dob?ageStr(hit.dob):(hit.age||''); $('#token').value=String(hit.tokenNo??hit.token??'');
+  // QR for PID only
+  generateQR($('#pid').value);
+  toast(`Loaded token #${tok}`);
+};
 
 /* ===== Rx/Lab UI helpers ===== */
 function addRxRow(d={}){ const tb=$('#rxTbl tbody'); const tr=document.createElement('tr'); tr.innerHTML=`<td><input class="input" value="${d.drug||''}" placeholder="Medicine"/></td><td><input class="input" value="${d.dose||''}" placeholder="5 ml / 1 tab"/></td><td><input class="input" value="${d.freq||''}" placeholder="1-0-1"/></td><td><input class="input" value="${d.days||''}" inputmode="numeric" placeholder="3"/></td><td><input class="input" value="${d.notes||''}" placeholder="after food / SOS"/></td><td><button class="btn" onclick="this.closest('tr').remove()">✕</button></td>`; tb.appendChild(tr); }
@@ -262,10 +315,12 @@ document.getElementById('btnPrint').onclick=()=>{ const rec={pid:$('#pid').value
 
 /* ===== Init ===== */
 document.addEventListener('DOMContentLoaded', async ()=>{
-  await DB.ensureOpen();
-  await loadBranding();
+  await window.DB?.ensureOpen?.();
+  await initBranding();
   populateTokensDropdown('');
   addRxRow(); addLabRow();
+  // If PID already present somehow, ensure QR shows
+  generateQR($('#pid').value);
 });
 </script>
 </body>

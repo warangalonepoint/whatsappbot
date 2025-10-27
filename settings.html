@@ -11,6 +11,8 @@
   <script src="./config/config.js"></script>
   <script src="./scripts/db.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
+  <!-- NEW: push client for notifications -->
+  <script src="./push-client.js?v=1.0.0"></script>
 
   <style>
     :root{
@@ -217,8 +219,28 @@
     </div>
   </div>
 
+  <!-- NEW: Doctor Notifications (push) -->
+  <div class="card" style="background:var(--mint)">
+    <h3>Doctor Notifications</h3>
+    <div class="small" style="margin-bottom:6px">
+      Enable on the doctor’s device to receive alerts when a booking is saved.
+    </div>
+    <div class="row" style="align-items:center">
+      <label class="badge">This device</label>
+      <label class="small">
+        <input id="pushToggle" type="checkbox" style="vertical-align:-2px;margin-right:6px">
+        Enable notifications
+      </label>
+      <span id="pushState" class="badge">—</span>
+      <button class="btn" id="btnTestPush">Test notification</button>
+    </div>
+    <div class="small" style="margin-top:6px;color:#64748b">
+      Requires a Service Worker; we’ll register <code>sw.js</code> automatically. For remote push, set
+      <code>APP_CONFIG.PUSH_ENDPOINT</code> &amp; <code>APP_CONFIG.VAPID_PUBLIC_KEY</code> in <code>config/config.js</code>.
+    </div>
+  </div>
+
   <!-- Backups / Snapshots / PINs / Diagnostics -->
-  <!-- (kept same as your existing; omitted here for brevity of UI preview) -->
   <div class="card" style="background:var(--mint)">
     <h3>Seed & Diagnostics</h3>
     <div class="row" style="gap:8px">
@@ -439,8 +461,47 @@ async function wipeAll(){
   toast('msgBR','All local data wiped. Reloading…'); setTimeout(()=>location.reload(),600);
 }
 
+/* ---------- Push (doctor notifications) ---------- */
+async function initPushUI(){
+  const $state = $('#pushState');
+  const updateState = async ()=>{
+    try{
+      const sub = await window.PushClient?.getSubscription?.();
+      const perm = (window.Notification?.permission||'default');
+      $state.textContent = (perm==='granted' && sub) ? 'Enabled' : (perm==='denied' ? 'Blocked' : 'Disabled');
+    }catch{ $state.textContent='—'; }
+  };
+
+  // Ensure SW registered
+  try{ await window.PushClient?.ensureSW?.(); }catch{}
+
+  // Wire toggle
+  window.PushClient?.initToggle?.(document.getElementById('pushToggle'));
+  await updateState();
+
+  // Test button
+  document.getElementById('btnTestPush').addEventListener('click', async ()=>{
+    try{
+      const reg = await navigator.serviceWorker?.ready;
+      reg?.active?.postMessage?.({
+        type:'LOCAL_NOTIFY',
+        title:'Test Notification',
+        options:{ body:'This is a test from Settings page', tag:'test', data:{url:'./opd-live.html'} }
+      });
+    }catch{}
+  });
+
+  // Reflect changes
+  window.addEventListener('storage', e=>{
+    if(e.key==='push_touch') updateState();
+  });
+}
+
 /* ---------- Boot ---------- */
-document.addEventListener('DOMContentLoaded', loadBranding);
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await loadBranding();
+  initPushUI(); // NEW
+});
 </script>
 
 <!-- Engines (keep) -->

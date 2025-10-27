@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <script src="./config/config.js"></script>
-  <script src="./scripts/db.js"></script>
+  <script src="./scripts/db.js?v=11"></script>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Lab Tests · Parameter Entry</title>
@@ -97,7 +97,7 @@
       <div style="flex:0 0 160px"><label>Date</label><input id="pdate" class="input" type="date"></div>
     </div>
 
-    <!-- OPD auto-feed controls -->
+    <!-- OPD auto-feed controls + totals -->
     <div class="row" style="margin-top:8px;align-items:center;justify-content:space-between">
       <div class="row">
         <div class="badge" id="qinfo">OPD Orders: 0 pending</div>
@@ -108,6 +108,28 @@
         <button class="btn" id="btnCSV">Export CSV</button>
       </div>
     </div>
+  </div>
+
+  <!-- NEW: Lab Orders Cart (Dexie + legacy) -->
+  <div class="card" style="background:#F8FAFC;border:1px solid #e5e7eb">
+    <div class="row" style="align-items:center;justify-content:space-between">
+      <div class="small"><b>Lab Orders Cart</b> — incoming OPD lab orders park here. Review, then add to report.</div>
+      <div class="row" style="gap:8px">
+        <button class="btn" id="btnAddAllCart" title="Add all orders to current report">Add ALL to Report</button>
+      </div>
+    </div>
+    <table class="table" id="labCartTbl" style="margin-top:8px">
+      <thead>
+        <tr>
+          <th style="width:160px">Date/Time</th>
+          <th>Patient</th>
+          <th>PID</th>
+          <th>Tests</th>
+          <th style="width:240px">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 
   <!-- Parameters -->
@@ -150,23 +172,34 @@
 </div>
 
 <script>
-/* ===================== Branding (same model as other pages) ===================== */
-function applyBranding(b){
-  try{
-    document.getElementById('hdrLogo').src   = b?.logoUrl   || './assets/logo.png';
-    document.getElementById('hdrBanner').src = b?.bannerUrl || './assets/banner.png';
-    document.documentElement.style.setProperty('--banner-h',  `${Number(b?.bannerH||150)}px`);
-    document.documentElement.style.setProperty('--banner-fit', b?.bannerFit||'contain');
-  }catch{}
+/* ===================== Branding ===================== */
+const THEMES = {
+  pastel: {'--bg-gradient':'linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec)','--mint':'#E8F6ED','--lav':'#F0EAFE','--peach':'#FFF3E8','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#17B26A'},
+  glass:  {'--bg-gradient':'linear-gradient(135deg,#eef2ff,#ecfeff,#fef9c3)','--mint':'#E0F2FE','--lav':'#E9D5FF','--peach':'#FFE4E6','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#0EA5E9'},
+  neo:    {'--bg-gradient':'linear-gradient(145deg,#f1f5f9,#e2e8f0,#f8fafc)','--mint':'#E2F7EC','--lav':'#EDE9FE','--peach':'#FFEAD5','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#111827'},
+  iphone: {'--bg-gradient':'linear-gradient(180deg,#f7f7f7,#f0f0f0)','--mint':'#E6F4EA','--lav':'#EEE7FF','--peach':'#FFE7D6','--card':'#fff','--ink':'#111','--muted':'#4b5563','--primary':'#0A84FF'}
+};
+function applyTheme(name){
+  const m = THEMES[name] || THEMES.pastel;
+  const root = document.documentElement;
+  Object.entries(m).forEach(([k,v])=> root.style.setProperty(k,v));
 }
-function lsBrand(){ try{return JSON.parse(localStorage.getItem('branding_json')||'null')||null;}catch{return null;} }
-(async function initBrand(){
-  try{ await window.DB?.open?.(); }catch{}
-  let b=null; try{ b=(await window.DB?.settings?.get?.('branding'))?.val||null; }catch{}
-  if(!b) b=lsBrand();
-  applyBranding(b||{});
-})();
-window.addEventListener('storage', e=>{ if(e.key==='branding_touch') initBrand(); });
+function applyBranding(b){
+  applyTheme(b.theme||'pastel');
+  document.getElementById('hdrLogo').src   = b.logoUrl || '../assets/logo.png';
+  document.getElementById('hdrBanner').src = b.bannerUrl || '../assets/banner.png';
+  document.documentElement.style.setProperty('--banner-h',  `${Number(b.bannerH||160)}px`);
+  document.documentElement.style.setProperty('--banner-fit', b.bannerFit||'contain');
+}
+function readLSBranding(){ try{ return JSON.parse(localStorage.getItem('branding_json')||'null')||null; }catch{ return null; } }
+async function loadBranding(){
+  let b=null;
+  try{ await DB.open?.(); b = await DB.settings?.get?.('branding'); b = b?.val || b?.value || null; }catch{}
+  if(!b) b = readLSBranding() || {};
+  applyBranding(b);
+}
+window.addEventListener('storage', (e)=>{ if(e.key==='branding_touch') loadBranding(); });
+
 
 /* ===================== Tests → Params ===================== */
 const TEST_PARAMS = {
@@ -459,18 +492,22 @@ document.getElementById('btnCSV').onclick = ()=>{
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`lab_report_${data.id}.csv`; a.click(); URL.revokeObjectURL(a.href);
 };
 
-/* ===== OPD auto-feed (shared queue) ===== */
+/* ===================== OPD auto-feed (shared queue) ===================== */
+/* Legacy helpers */
 const QKEY='lab_orders_queue';
 function loadQueue(){ let arr=[]; try{arr=JSON.parse(localStorage.getItem(QKEY)||'[]');}catch{} return Array.isArray(arr)?arr:[]; }
 function saveQueue(arr){ localStorage.setItem(QKEY, JSON.stringify(arr)); }
-function refreshQueueBadge(){ const n=loadQueue().length; document.getElementById('qinfo').textContent = `OPD Orders: ${n} pending`; }
+function refreshQueueBadge(){ const n=(LAB_CART||[]).length || loadQueue().length; document.getElementById('qinfo').textContent = `OPD Orders: ${n} pending`; }
 
+/* Existing single-pop button keeps working (uses legacy queue) */
 function applyOrder(o){
+  // Fill patient block
   document.getElementById('pname').value = o.name||'';
   document.getElementById('ppid').value  = o.pid||'';
   document.getElementById('pref').value  = (o.ref||o.refBy||'OPD')+'';
   document.getElementById('pdate').value = todayISO();
 
+  // Add tests to PREVIEW
   (o.items||[]).forEach(x=>{
     const test = x.test || x.name || x;
     if(!TEST_PARAMS[test]) return;
@@ -480,9 +517,7 @@ function applyOrder(o){
     });
   });
   redrawPreview();
-  alert(`Loaded OPD order for ${o.pid||''} · ${o.name||''}`);
 }
-
 function loadNextOrder(pop=true){
   const q=loadQueue();
   if(!q.length){ alert('No pending OPD orders'); return; }
@@ -493,20 +528,180 @@ function loadNextOrder(pop=true){
 }
 document.getElementById('btnLoadNext').onclick = ()=> loadNextOrder(true);
 
+/* ===================== NEW: Cart – Dexie + Legacy with merge ===================== */
+let LAB_CART = []; // persisted as lab_cart_json
+function readLS(k,f){ try{ const v=JSON.parse(localStorage.getItem(k)||'null'); return (v==null?f:v);}catch{ return f; } }
+function writeLS(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} }
+function fmtDT(x){ const d=new Date(x||Date.now()); return d.toLocaleString(); }
+
+function saveCart(){ writeLS('lab_cart_json', LAB_CART); }
+function loadCart(){ LAB_CART = readLS('lab_cart_json', []); }
+
+async function listPendingDexie(){
+  // Dexie mirror, status:'queued'
+  try{
+    await window.DB?.ensureOpen?.();
+    const all = await window.DB?.lab_orders?.toArray?.() || [];
+    return all.filter(r=> String(r.status||'').toLowerCase()==='queued');
+  }catch{ return []; }
+}
+function listLegacy(){
+  return loadQueue(); // same as before
+}
+
+function renderCart(){
+  const tb=document.querySelector('#labCartTbl tbody');
+  tb.innerHTML='';
+  LAB_CART.sort((a,b)=> String(a.date||'').localeCompare(String(b.date||'')));
+  LAB_CART.forEach((r,i)=>{
+    const tests = Array.isArray(r.items)? r.items.map(x=> (x.test||x.name||x)).join(', ') : '';
+    tb.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${fmtDT(r.date)}</td>
+        <td>${(r.name||r.patientName||'')} <span class="pill">${(r.phone||r.patientPhone||'').slice(-10)}</span></td>
+        <td>${r.pid||''}</td>
+        <td>${tests}</td>
+        <td>
+          <div class="row" style="gap:6px">
+            <button class="btn primary" onclick="addCartRowToReport(${i})">Add to Report</button>
+            <button class="btn" onclick="dismissCartRow(${i})">Dismiss</button>
+          </div>
+        </td>
+      </tr>
+    `);
+  });
+  refreshQueueBadge();
+}
+window.addCartRowToReport = async function(ix){
+  const row = LAB_CART[ix]; if(!row) return;
+  // Populate patient block (choice A)
+  document.getElementById('pname').value = row.name || row.patientName || '';
+  document.getElementById('ppid').value  = row.pid || '';
+  document.getElementById('pref').value  = (row.ref || row.refBy || 'OPD') + '';
+  document.getElementById('pdate').value = todayISO();
+
+  // Add tests into PREVIEW
+  (row.items||[]).forEach(x=>{
+    const test = x.test || x.name || x;
+    if(!TEST_PARAMS[test]) return;
+    TEST_PARAMS[test].forEach(p=>{
+      const key = `${test}|${p.k}|${Date.now()}|${Math.random().toString(36).slice(2,6)}`;
+      PREVIEW.push({ test, key, lab:p.lab, result:"", norm:p.norm||"" });
+    });
+  });
+  redrawPreview();
+
+  // Mark source as consumed
+  if(row.source==='dexie' && row._dexieId!=null){
+    try{ await window.DB.lab_orders.update(row._dexieId, {status:'pulled', updatedAt:new Date().toISOString()}); }catch{}
+  }
+  if(row.source==='legacy' && row._legacyIx!=null){
+    const q=listLegacy(); q.splice(row._legacyIx,1); saveQueue(q);
+  }
+
+  // Remove from cart
+  LAB_CART.splice(ix,1); saveCart(); renderCart();
+};
+window.dismissCartRow = async function(ix){
+  const row = LAB_CART[ix]; if(!row) return;
+  if(row.source==='dexie' && row._dexieId!=null){
+    try{ await window.DB.lab_orders.update(row._dexieId, {status:'pulled', updatedAt:new Date().toISOString()}); }catch{}
+  }
+  if(row.source==='legacy' && row._legacyIx!=null){
+    const q=listLegacy(); q.splice(row._legacyIx,1); saveQueue(q);
+  }
+  LAB_CART.splice(ix,1); saveCart(); renderCart();
+};
+document.getElementById('btnAddAllCart').addEventListener('click', async ()=>{
+  const snapshot = LAB_CART.slice();
+  for(const r of snapshot){
+    const ix = LAB_CART.findIndex(x=>x.id===r.id);
+    if(ix>=0) await window.addCartRowToReport(ix);
+  }
+});
+
+async function parkIntoCart(){
+  const dex = await listPendingDexie();
+  const legacy = listLegacy();
+
+  const seen = new Set(LAB_CART.map(x=>x.id));
+  // Dexie rows
+  dex.forEach(r=>{
+    const id = (r.id!=null)? 'dexie:'+r.id : 'dexie:'+String(r.createdAt||'')+':'+(r.pid||'');
+    if(seen.has(id)) return;
+    LAB_CART.push({
+      id,
+      source:'dexie',
+      _dexieId: r.id ?? null,
+      date: r.createdAt || r.updatedAt || new Date().toISOString(),
+      pid: r.pid || '',
+      name: r.name || r.patientName || '',
+      phone: r.phone || r.patientPhone || '',
+      items: Array.isArray(r.items)? r.items : []
+    });
+    seen.add(id);
+  });
+  // Legacy rows
+  legacy.forEach((o,ix)=>{
+    const id='legacy:'+ (o.createdAt||o.ts||ix)+':'+(o.pid||'');
+    if(seen.has(id)) return;
+    LAB_CART.push({
+      id,
+      source:'legacy',
+      _legacyIx: ix,
+      date: o.createdAt || o.ts || new Date().toISOString(),
+      pid: o.pid || '',
+      name: o.name || '',
+      phone: o.phone || '',
+      items: Array.isArray(o.items)? o.items : []
+    });
+    seen.add(id);
+  });
+
+  saveCart();
+  renderCart();
+}
+
+/* Listen to clinic bus + storage touch */
+try{
+  if('BroadcastChannel' in window){
+    const bus = new BroadcastChannel('clinic-queue-sync-v1');
+    bus.onmessage = (e)=>{
+      if(e?.data?.type==='lab_order_enqueued'){ parkIntoCart(); }
+    };
+  }
+}catch{}
+window.addEventListener('storage', (e)=>{
+  if(e.key===QKEY || e.key===QKEY+'_touch'){ parkIntoCart(); }
+});
+
 /* ===== Keyboard shortcuts ===== */
 document.addEventListener('keydown', (e)=>{
   const hot = (e.ctrlKey||e.metaKey) ? 'Ctrl+'+e.key.toUpperCase() : e.key;
   if(hot==='Escape'){ e.preventDefault(); document.getElementById('tSearch').focus(); document.getElementById('tSearch').select?.(); }
   if(hot==='Ctrl+S'){ e.preventDefault(); document.getElementById('btnSave').click(); }
   if(hot==='Ctrl+P'){ e.preventDefault(); document.getElementById('btnPrint').click(); }
-  if(hot==='Ctrl+N'){ e.preventDefault(); PREVIEW=[]; redrawPreview(); document.getElementById('pname').value=''; document.getElementById('ppid').value=''; document.getElementById('pref').value=''; document.getElementById('page').value=''; document.getElementById('psex').value=''; document.getElementById('pdate').value=todayISO(); document.getElementById('tSearch').focus(); }
+  if(hot==='Ctrl+N'){ e.preventDefault();
+    PREVIEW=[]; redrawPreview();
+    document.getElementById('pname').value='';
+    document.getElementById('ppid').value='';
+    document.getElementById('pref').value='';
+    document.getElementById('page').value='';
+    document.getElementById('psex').value='';
+    document.getElementById('pdate').value=todayISO();
+    document.getElementById('tSearch').focus();
+  }
 });
 
 /* ===== init ===== */
 document.getElementById('pdate').value = todayISO();
-refreshQueueBadge();
 window.addEventListener('storage', (e)=>{ if(e.key==='lab_tests_json'){ PRICE_MAP=loadCatalog(); renderParams(); updateTotalBadge(); }});
 renderParams();
+
+(function boot(){
+  // load persisted cart and then merge in any fresh pending
+  loadCart(); renderCart(); parkIntoCart();
+})();
 </script>
 </body>
 </html>

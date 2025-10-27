@@ -83,12 +83,34 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui}
 </div>
 
 <script>
-/* ---------- Branding ---------- */
-PharmacyBranding?.onChange?.(b=>{
-  const l=document.getElementById('logo'); if(l) l.src=b.logoUrl||'./assets/logo.png';
-  const bn=document.getElementById('banner'); if(bn) bn.src=b.bannerUrl||'./assets/banner.png';
-  if(b.bannerHeight){ document.documentElement.style.setProperty('--banner-h', b.bannerHeight); }
-});
+/* ===================== Branding sync ===================== */
+const THEMES = {
+  pastel: {'--bg-gradient':'linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec)','--mint':'#E8F6ED','--lav':'#F0EAFE','--peach':'#FFF3E8','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#17B26A'},
+  glass:  {'--bg-gradient':'linear-gradient(135deg,#eef2ff,#ecfeff,#fef9c3)','--mint':'#E0F2FE','--lav':'#E9D5FF','--peach':'#FFE4E6','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#0EA5E9'},
+  neo:    {'--bg-gradient':'linear-gradient(145deg,#f1f5f9,#e2e8f0,#f8fafc)','--mint':'#E2F7EC','--lav':'#EDE9FE','--peach':'#FFEAD5','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#111827'},
+  iphone: {'--bg-gradient':'linear-gradient(180deg,#f7f7f7,#f0f0f0)','--mint':'#E6F4EA','--lav':'#EEE7FF','--peach':'#FFE7D6','--card':'#fff','--ink':'#111','--muted':'#4b5563','--primary':'#0A84FF'}
+};
+function applyTheme(name){
+  const m = THEMES[name] || THEMES.pastel;
+  const root = document.documentElement;
+  Object.entries(m).forEach(([k,v])=> root.style.setProperty(k,v));
+}
+function applyBranding(b){
+  applyTheme(b.theme||'pastel');
+  document.getElementById('hdrLogo').src   = b.logoUrl || '../assets/logo.png';
+  document.getElementById('hdrBanner').src = b.bannerUrl || '../assets/banner.png';
+  document.documentElement.style.setProperty('--banner-h',  `${Number(b.bannerH||160)}px`);
+  document.documentElement.style.setProperty('--banner-fit', b.bannerFit||'contain');
+}
+function readLSBranding(){ try{ return JSON.parse(localStorage.getItem('branding_json')||'null')||null; }catch{ return null; } }
+async function loadBranding(){
+  let b=null;
+  try{ await DB.open?.(); b = await DB.settings?.get?.('branding'); b = b?.val || b?.value || null; }catch{}
+  if(!b) b = readLSBranding() || {};
+  applyBranding(b);
+}
+window.addEventListener('storage', (e)=>{ if(e.key==='branding_touch') loadBranding(); });
+
 
 /* ---------- Dexie bootstrap ---------- */
 const db = new Dexie('clinicdb');
@@ -202,6 +224,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const t = localStorage.getItem('tv_ticker') || 'Welcome';
   document.getElementById('ticker').value = t;
 });
+<script src="./scripts/theme-engine.js">
 </script>
 </body>
 </html>

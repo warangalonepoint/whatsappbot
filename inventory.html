@@ -60,7 +60,7 @@
       </div>
     </div>
     <div class="row" style="gap:6px">
-      <a class="btn" href="./pharmacy.html">DRUVHI MEDICALS</a>
+      <a class="btn" href="./pharmacy.html"></a>
       <a class="btn" href="./index.html">Home</a>
     </div>
   </div>
@@ -399,55 +399,40 @@ function sortBy(k){ if(sortKey===k) sortAsc=!sortAsc; else { sortKey=k; sortAsc=
 <script src="/scripts/barcode.js?v=8.4.6"></script>
 <script src="/scripts/scanner.js?v=1.0"></script>
 <script src="/scripts/app-wiring.js?v=1.1"></script>
-<script src="/scripts/seed-and-diagnostics.js?v=1.3"></script>
+<script src="/scripts/seed-and-diagnostics.js?v=1.3">
+<script src="./scripts/theme-engine.js">
 
-<!-- Pass1 theme + branding hook (non-invasive) -->
-<script>
-(function(){
-  function readBrand(){
-    try { return JSON.parse(localStorage.getItem('branding_json')||'null') || null; } catch(e){ return null; }
-  }
-  const b = readBrand(); if(!b) return;
+
+/* ===================== Branding sync ===================== */
+const THEMES = {
+  pastel: {'--bg-gradient':'linear-gradient(145deg,#f4f8f6,#f3f0fa,#fff4ec)','--mint':'#E8F6ED','--lav':'#F0EAFE','--peach':'#FFF3E8','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#17B26A'},
+  glass:  {'--bg-gradient':'linear-gradient(135deg,#eef2ff,#ecfeff,#fef9c3)','--mint':'#E0F2FE','--lav':'#E9D5FF','--peach':'#FFE4E6','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#0EA5E9'},
+  neo:    {'--bg-gradient':'linear-gradient(145deg,#f1f5f9,#e2e8f0,#f8fafc)','--mint':'#E2F7EC','--lav':'#EDE9FE','--peach':'#FFEAD5','--card':'#fff','--ink':'#0f172a','--muted':'#475569','--primary':'#111827'},
+  iphone: {'--bg-gradient':'linear-gradient(180deg,#f7f7f7,#f0f0f0)','--mint':'#E6F4EA','--lav':'#EEE7FF','--peach':'#FFE7D6','--card':'#fff','--ink':'#111','--muted':'#4b5563','--primary':'#0A84FF'}
+};
+function applyTheme(name){
+  const m = THEMES[name] || THEMES.pastel;
   const root = document.documentElement;
-  const THEMES = {
-    pastel: {
-      "--bg-gradient":"linear-gradient(145deg,#edf3f0,#ece9f6,#fff0e6)",
-      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#17B26A",
-      "--mint":"#C8E3D2","--lav":"#D7CEF0","--peach":"#FFD8B8"
-    },
-    glass: {
-      "--bg-gradient":"linear-gradient(135deg,#f8fafc,#eef2ff)",
-      "--card":"#ffffffcc","--ink":"#0f172a","--muted":"#475569","--primary":"#2563eb",
-      "--mint":"#e2e8f0","--lav":"#e9d5ff","--peach":"#ffedd5"
-    },
-    neo: {
-      "--bg-gradient":"linear-gradient(135deg,#f3f4f6,#fafafa)",
-      "--card":"#ffffff","--ink":"#111827","--muted":"#6b7280","--primary":"#10b981",
-      "--mint":"#d1fae5","--lav":"#ede9fe","--peach":"#ffe4e6"
-    },
-    iphone: {
-      "--bg-gradient":"linear-gradient(180deg,#fdf2f8,#eff6ff)",
-      "--card":"#ffffff","--ink":"#0f172a","--muted":"#475569","--primary":"#0ea5e9",
-      "--mint":"#e0f2fe","--lav":"#e9d5ff","--peach":"#ffe4e6"
-    }
-  };
-  const theme = THEMES[b.theme || 'pastel'];
-  if(theme){
-    Object.entries(theme).forEach(([k,v])=> root.style.setProperty(k, v));
-  }
-  // Swap logos and banners wherever present
-  const logoUrl = b.logoUrl || "";
-  const banUrl  = b.bannerUrl || "";
-  if(logoUrl){
-    document.querySelectorAll('img#logo, img#ph_logo, img.logo').forEach(el=> el.src = logoUrl);
-  }
-  if(banUrl){
-    document.querySelectorAll('#hdrBanner, .banner img, img[alt*="Banner"]').forEach(el=> el.src = banUrl);
-  }
-  // Titles
-  if(b.clinicName) { const el=document.getElementById('clinicTitle'); if(el) el.textContent=b.clinicName; }
-  if(b.pharmacyName){ const el=document.getElementById('ph_name'); if(el) el.textContent=b.pharmacyName; }
-})();
+  Object.entries(m).forEach(([k,v])=> root.style.setProperty(k,v));
+}
+function applyBranding(b){
+  applyTheme(b.theme||'pastel');
+  document.getElementById('hdrLogo').src   = b.logoUrl || '../assets/logo.png';
+  document.getElementById('hdrBanner').src = b.bannerUrl || '../assets/banner.png';
+  document.documentElement.style.setProperty('--banner-h',  `${Number(b.bannerH||160)}px`);
+  document.documentElement.style.setProperty('--banner-fit', b.bannerFit||'contain');
+}
+function readLSBranding(){ try{ return JSON.parse(localStorage.getItem('branding_json')||'null')||null; }catch{ return null; } }
+async function loadBranding(){
+  let b=null;
+  try{ await DB.open?.(); b = await DB.settings?.get?.('branding'); b = b?.val || b?.value || null; }catch{}
+  if(!b) b = readLSBranding() || {};
+  applyBranding(b);
+}
+window.addEventListener('storage', (e)=>{ if(e.key==='branding_touch') loadBranding(); });
+
+
 </script>
+
 </body>
 </html>

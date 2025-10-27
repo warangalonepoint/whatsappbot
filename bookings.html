@@ -9,7 +9,7 @@
   <link rel="manifest" href="../manifest.json"/>
 
   <!-- DB + helpers (keep db.js in your project root /scripts) -->
-  <script src="../scripts/db.js"></script>
+  <script src="../scripts/db.js?v=11"></script>
   <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
   <script src="../scripts/qrcode.min.js"></script>
   <script> if(!window.QRCode){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';document.head.appendChild(s);} </script>
@@ -493,6 +493,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   await loadBranding();
   refresh();
 });
+<script src="./scripts/theme-engine.js">
+
 </script>
 </body>
 </html>
